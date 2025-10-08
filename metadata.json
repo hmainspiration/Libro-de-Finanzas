@@ -1,0 +1,5 @@
+{
+  "name": "Sistema de Finanzas - Iglesia",
+  "description": "A web application to manage the finances of a church, including member donations, expense tracking, and report generation. It features a mobile-first design for ease of use.",
+  "requestFramePermissions": []
+}
