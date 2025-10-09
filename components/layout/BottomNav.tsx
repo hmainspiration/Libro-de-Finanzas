@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { Tab } from '../../types';
-import { HomeIcon, ChartBarIcon, CalendarDaysIcon, ChartPieIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
+import { HomeIcon, ChartBarIcon, CalendarDaysIcon, ChartPieIcon, Cog6ToothIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 
 interface BottomNavProps {
   activeTab: Tab;
@@ -13,6 +12,7 @@ const navItems = [
   { id: 'summary', label: 'Resumen', icon: ChartBarIcon },
   { id: 'history', label: 'Semanas', icon: CalendarDaysIcon },
   { id: 'monthly', label: 'Mensual', icon: ChartPieIcon },
+  { id: 'informe', label: 'Informe', icon: DocumentTextIcon },
   { id: 'admin', label: 'Admin', icon: Cog6ToothIcon },
 ];
 

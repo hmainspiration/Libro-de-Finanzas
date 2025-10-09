@@ -42,7 +42,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 type="text"
                 value={churchName}
                 onChange={(e) => setChurchName(e.target.value)}
-                placeholder="La Empresa"
+                placeholder="Iglesia"
                 className="w-full py-3 pl-10 pr-4 text-gray-700 bg-gray-100 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-secondary focus:border-transparent"
               />
             </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Tab, WeeklyRecord, Member, Formulas } from '../types';
+import { Tab, WeeklyRecord, Member, Formulas, MonthlyReport } from '../types';
 import { INITIAL_MEMBERS, INITIAL_CATEGORIES, DEFAULT_FORMULAS } from '../constants';
 import Header from '../components/layout/Header';
 import BottomNav from '../components/layout/BottomNav';
@@ -8,6 +8,7 @@ import ResumenFinancieroTab from '../components/tabs/ResumenFinancieroTab';
 import SemanasRegistradasTab from '../components/tabs/SemanasRegistradasTab';
 import ResumenMensualTab from '../components/tabs/ResumenMensualTab';
 import AdminPanelTab from '../components/tabs/AdminPanelTab';
+import InformeMensualTab from '../components/tabs/InformeMensualTab';
 
 interface MainAppProps {
   onLogout: () => void;
@@ -20,6 +21,7 @@ const MainApp: React.FC<MainAppProps> = ({ onLogout }) => {
   const [weeklyRecords, setWeeklyRecords] = useState<WeeklyRecord[]>([]);
   const [currentRecord, setCurrentRecord] = useState<WeeklyRecord | null>(null);
   const [formulas, setFormulas] = useState<Formulas>(DEFAULT_FORMULAS);
+  const [monthlyReports, setMonthlyReports] = useState<MonthlyReport[]>([]);
 
   useEffect(() => {
     const savedMembers = localStorage.getItem('churchMembers');
@@ -33,6 +35,9 @@ const MainApp: React.FC<MainAppProps> = ({ onLogout }) => {
 
     const savedFormulas = localStorage.getItem('churchFormulas');
     setFormulas(savedFormulas ? JSON.parse(savedFormulas) : DEFAULT_FORMULAS);
+
+    const savedReports = localStorage.getItem('churchMonthlyReports');
+    setMonthlyReports(savedReports ? JSON.parse(savedReports) : []);
   }, []);
 
   const persistData = useCallback(<T,>(key: string, data: T) => {
@@ -43,6 +48,7 @@ const MainApp: React.FC<MainAppProps> = ({ onLogout }) => {
   useEffect(() => { persistData('churchCategories', categories) }, [categories, persistData]);
   useEffect(() => { persistData('churchWeeklyRecords', weeklyRecords) }, [weeklyRecords, persistData]);
   useEffect(() => { persistData('churchFormulas', formulas) }, [formulas, persistData]);
+  useEffect(() => { persistData('churchMonthlyReports', monthlyReports) }, [monthlyReports, persistData]);
 
   const handleSaveCurrentRecord = () => {
     if (!currentRecord) return;
@@ -92,6 +98,13 @@ const MainApp: React.FC<MainAppProps> = ({ onLogout }) => {
                 />;
       case 'monthly':
         return <ResumenMensualTab records={weeklyRecords} categories={categories} />;
+      case 'informe':
+        return <InformeMensualTab 
+                    records={weeklyRecords} 
+                    formulas={formulas} 
+                    savedReports={monthlyReports}
+                    setSavedReports={setMonthlyReports}
+                />;
       case 'admin':
         return (
           <AdminPanelTab

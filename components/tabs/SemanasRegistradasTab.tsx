@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { WeeklyRecord, Member, Donation } from '../../types';
-import { PencilIcon, TrashIcon, XMarkIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { PencilIcon, TrashIcon, XMarkIcon, PlusIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { MONTH_NAMES } from '../../constants';
 
 // Copied from RegistroOfrendasTab, to be used inside the modal
@@ -139,6 +139,57 @@ const SemanasRegistradasTab: React.FC<SemanasRegistradasTabProps> = ({ records, 
     }
   };
   
+  const handleExportExcel = (record: WeeklyRecord) => {
+    // 1. Calculate totals
+    const subtotals: Record<string, number> = {};
+    categories.forEach(cat => { subtotals[cat] = 0; });
+    record.donations.forEach(d => {
+        if (subtotals[d.category] !== undefined) {
+            subtotals[d.category] += d.amount;
+        }
+    });
+
+    const total = (subtotals['Diezmo'] || 0) + (subtotals['Ordinaria'] || 0);
+    const diezmoDeDiezmo = Math.round(total * (record.formulas.diezmoPercentage / 100));
+    const remanente = total > record.formulas.remanenteThreshold ? Math.round(total - record.formulas.remanenteThreshold) : 0;
+    const gomerMinistro = Math.round(total - diezmoDeDiezmo);
+
+    // 2. Prepare data for sheets
+    const summaryData = [
+        ["Resumen Semanal"],
+        [],
+        ["Fecha:", `${record.day}/${record.month}/${record.year}`],
+        ["Ministro:", record.minister],
+        [],
+        ["Concepto", "Monto (C$)"],
+        ...categories.map(cat => [cat, subtotals[cat] || 0]),
+        [],
+        ["Cálculos Finales", ""],
+        ["TOTAL (Diezmo + Ordinaria)", total],
+        [`Diezmo de Diezmo (${record.formulas.diezmoPercentage}%)`, diezmoDeDiezmo],
+        [`Remanente (Umbral C$ ${record.formulas.remanenteThreshold})`, remanente],
+        ["Gomer del Ministro", gomerMinistro]
+    ];
+
+    const donationsData = record.donations.map(d => ({
+        Miembro: d.memberName,
+        Categoría: d.category,
+        Monto: d.amount,
+    }));
+
+    // 3. Create workbook and sheets
+    const wb = (window as any).XLSX.utils.book_new();
+    
+    const wsSummary = (window as any).XLSX.utils.aoa_to_sheet(summaryData);
+    (window as any).XLSX.utils.book_append_sheet(wb, wsSummary, "Resumen");
+
+    const wsDonations = (window as any).XLSX.utils.json_to_sheet(donationsData);
+    (window as any).XLSX.utils.book_append_sheet(wb, wsDonations, "Detalle de Ofrendas");
+
+    // 4. Trigger download
+    (window as any).XLSX.writeFile(wb, `Reporte_Semanal_${record.day}-${record.month}-${record.year}.xlsx`);
+  };
+
   const selectedMemberName = useMemo(() => selectedMember?.name || '', [selectedMember]);
 
   if (records.length === 0) {
@@ -172,10 +223,13 @@ const SemanasRegistradasTab: React.FC<SemanasRegistradasTabProps> = ({ records, 
                     <p className="text-sm text-gray-600 mt-1">Total (Diezmo + Ord.): <span className="font-semibold">C$ {total.toFixed(2)}</span></p>
                 </div>
                 <div className="flex items-center space-x-2 mt-4 sm:mt-0">
-                    <button onClick={() => handleOpenEditModal(record)} className="p-2 text-white bg-secondary rounded-full hover:bg-blue-600 transition">
+                    <button onClick={() => handleExportExcel(record)} className="p-2 text-white bg-success rounded-full hover:bg-green-600 transition" title="Exportar a Excel">
+                        <ArrowDownTrayIcon className="w-5 h-5"/>
+                    </button>
+                    <button onClick={() => handleOpenEditModal(record)} className="p-2 text-white bg-secondary rounded-full hover:bg-blue-600 transition" title="Editar">
                         <PencilIcon className="w-5 h-5"/>
                     </button>
-                    <button onClick={() => handleDelete(record.id)} className="p-2 text-white bg-danger rounded-full hover:bg-red-600 transition">
+                    <button onClick={() => handleDelete(record.id)} className="p-2 text-white bg-danger rounded-full hover:bg-red-600 transition" title="Eliminar">
                         <TrashIcon className="w-5 h-5"/>
                     </button>
                 </div>
