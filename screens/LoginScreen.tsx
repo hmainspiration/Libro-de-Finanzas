@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BuildingStorefrontIcon, LockClosedIcon } from '@heroicons/react/24/outline';
-import { supabase } from '../lib/supabase'; // Ajusta la ruta según tu estructura
+import { supabase } from '../../supabase'; // ← ESTA ES LA RUTA CORRECTA
 
 interface LoginScreenProps {
   onLoginSuccess: () => void;
