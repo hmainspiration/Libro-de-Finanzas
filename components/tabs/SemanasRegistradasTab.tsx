@@ -15,7 +15,7 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({ members, onSelect
 import { WeeklyRecord, Member, Donation } from '../../types';
 import { PencilIcon, TrashIcon, XMarkIcon, PlusIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { MONTH_NAMES } from '../../constants';
-import { supabase } from '../lib/supabase' // Ajusta la ruta según tu estructura
+import { supabase } from '../lib/supabase'; // Ajusta la ruta según tu estructura
 
 // ... (el código de AutocompleteInput se mantiene igual)
 
