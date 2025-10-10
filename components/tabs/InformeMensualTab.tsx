@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, FC } from 'react';
 import { WeeklyRecord, Formulas, MonthlyReport } from '../../types';
 import { MONTH_NAMES, initialMonthlyReportFormState } from '../../constants';
 import { ArrowUpOnSquareIcon, TrashIcon, ArchiveBoxArrowDownIcon } from '@heroicons/react/24/outline';
-import { supabase } from '../lib/supabase'; // Ajusta la ruta según tu estructura
+import { supabase } from '../Lib/supabase'; // Ajusta la ruta según tu estructura
 
 // ... (el resto de imports y componentes Accordion y CurrencyInput se mantienen igual)
 
