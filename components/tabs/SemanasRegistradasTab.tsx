@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { WeeklyRecord, Member, Donation } from '../../types';
 import { PencilIcon, TrashIcon, XMarkIcon, PlusIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { MONTH_NAMES } from '../../constants';
-
+import { supabase } from '../Lib/supabase'; // Ajusta la ruta según tu estructura
 // Copied from RegistroOfrendasTab, to be used inside the modal
 interface AutocompleteInputProps {
   members: Member[];
@@ -15,7 +15,6 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({ members, onSelect
 import { WeeklyRecord, Member, Donation } from '../../types';
 import { PencilIcon, TrashIcon, XMarkIcon, PlusIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { MONTH_NAMES } from '../../constants';
-import { supabase } from '../Lib/supabase'; // Ajusta la ruta según tu estructura
 
 // ... (el código de AutocompleteInput se mantiene igual)
 
