@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BuildingStorefrontIcon, LockClosedIcon } from '@heroicons/react/24/outline';
-import { supabase } from '../../supabase'; // ← ESTA ES LA RUTA CORRECTA
+import { supabase } from '../../supabase';
 
 interface LoginScreenProps {
   onLoginSuccess: () => void;
@@ -17,7 +17,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     setError('');
 
     try {
-      // Consultar en Supabase si existe la iglesia con esa contraseña
       const { data, error } = await supabase
         .from('churches')
         .select('*')
@@ -29,11 +28,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         console.error('Error de Supabase:', error);
         setError('Error de conexión. Intente nuevamente.');
       } else if (data) {
-        // Login exitoso
         setError('');
         onLoginSuccess();
-        
-        // Opcional: Guardar en localStorage para persistir sesión
         localStorage.setItem('churchSession', JSON.stringify({
           id: data.id,
           name: data.name,
