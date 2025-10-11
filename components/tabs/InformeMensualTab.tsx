@@ -159,7 +159,18 @@ const InformeMensualTab: React.FC<InformeMensualTabProps> = ({ records, formulas
 
     const handleClearForm = () => {
         if (window.confirm('¿Estás seguro de que quieres limpiar todos los campos?')) {
-            setFormState(initialMonthlyReportFormState);
+            setFormState({
+                ...initialMonthlyReportFormState,
+                'mes-reporte': MONTH_NAMES[selectedMonth - 1],
+                'ano-reporte': selectedYear.toString(),
+                'clave-iglesia': 'NIMT02',
+                'nombre-iglesia': 'La Empresa',
+                'nombre-ministro': churchInfo.defaultMinister,
+                'grado-ministro': churchInfo.ministerGrade,
+                'distrito': churchInfo.district,
+                'departamento': churchInfo.department,
+                'tel-ministro': churchInfo.ministerPhone,
+            });
         }
     };
     
@@ -346,7 +357,7 @@ const InformeMensualTab: React.FC<InformeMensualTabProps> = ({ records, formulas
                 let finalYResumen, finalYDistribucion;
                 (doc as any).autoTable({ head: [['RESUMEN Y CIERRE', '']], body: resumenData, startY: summaryTableStartY, ...tableConfig, tableWidth: (pageW / 2) - margin - 1, margin: { left: margin }, });
                 finalYResumen = (doc as any).autoTable.previous.finalY;
-                (doc as any).autoTable({ head: [['SALDO DEL REMANENTE DISTRIBUIDO A:', '']], body: distribucionData, startY: summaryTableStartY, ...tableConfig, tableWidth: (pageW / 2) - margin - 1, margin: { left: pageW / 2 + 1 }, });
+                (doc as any).autoTable({ head: [['SALDO DEL REMANente DISTRIBUIDO A:', '']], body: distribucionData, startY: summaryTableStartY, ...tableConfig, tableWidth: (pageW / 2) - margin - 1, margin: { left: pageW / 2 + 1 }, });
                 finalYDistribucion = (doc as any).autoTable.previous.finalY;
                 startY = Math.max(finalYResumen, finalYDistribucion) + 10;
                 if (startY > pageH - 55) { doc.addPage(); startY = margin; }
@@ -408,35 +419,8 @@ const InformeMensualTab: React.FC<InformeMensualTabProps> = ({ records, formulas
                 <p className="text-lg md:text-xl text-gray-600">Información Financiera Mensual - Jurisdicción Nicaragua, C.A.</p>
             </header>
 
-            <Accordion title="Informes Guardados">
-                <div className="space-y-3 max-h-60 overflow-y-auto p-1">
-                    {sortedReports.length > 0 ? (
-                        sortedReports.map(report => (
-                            <div key={report.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 rounded-lg border">
-                                <div>
-                                    <p className="font-semibold text-primary">{MONTH_NAMES[report.month - 1]} {report.year}</p>
-                                    <p className="text-xs text-gray-500">ID: {report.id}</p>
-                                </div>
-                                <div className="flex items-center space-x-2 mt-2 sm:mt-0">
-                                    <button onClick={() => handleLoadReport(report)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors">
-                                        <ArrowUpOnSquareIcon className="w-4 h-4" />
-                                        Cargar
-                                    </button>
-                                    <button onClick={() => handleDeleteReport(report.id)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-danger rounded-md hover:bg-red-600 transition-colors">
-                                        <TrashIcon className="w-4 h-4" />
-                                        Eliminar
-                                    </button>
-                                </div>
-                            </div>
-                        ))
-                    ) : (
-                        <p className="text-center text-gray-500 py-2">No hay informes guardados.</p>
-                    )}
-                </div>
-            </Accordion>
-
              <div className="p-6 bg-white rounded-xl shadow-lg space-y-4">
-                <h3 className="text-xl font-bold text-primary">Cargar Datos del Sistema</h3>
+                <h3 className="text-xl font-bold text-indigo-900">Cargar Datos del Sistema</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
                     <div>
                         <label htmlFor="reportMonth" className="block text-sm font-medium text-gray-700">Mes</label>
@@ -452,7 +436,7 @@ const InformeMensualTab: React.FC<InformeMensualTabProps> = ({ records, formulas
                         Cargar Datos del Mes
                     </button>
                 </div>
-                 <p className="text-xs text-gray-500 mt-2">Nota: Esto llenará automáticamente los campos del informe con los datos de las semanas registradas para el mes seleccionado. Los campos como "Primicias" o "Colectas Especiales" deben llenarse manually.</p>
+                 <p className="text-xs text-gray-500 mt-2">Nota: Esto llenará automáticamente los campos del informe con los datos de las semanas registradas para el mes seleccionado. Los campos como "Primicias" o "Colectas Especiales" deben llenarse manualmente.</p>
             </div>
 
             <form id="financial-form" className="space-y-4">
@@ -531,50 +515,52 @@ const InformeMensualTab: React.FC<InformeMensualTabProps> = ({ records, formulas
                     </div>
                 </Accordion>
 
-                <Accordion title="4. Resumen y Firmas">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-                        <Subheading title="Distribución del Remanente" />
-                        <Field id="dist-direccion" label="Dirección General (Diezmos de Diezmos)" />
-                        <Field id="dist-tesoreria" label="Tesorería (Cuenta de Remanentes)" />
-                        <Field id="dist-pro-construccion" label="Pro-Construcción" />
-                        <Field id="dist-otros" label="Otros" />
+                <Accordion title="4. Resumen, Cierre y Distribución" initialOpen={true}>
+                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <div className="p-4 bg-gray-50 rounded-xl border space-y-4">
+                             <h3 className="text-lg font-bold text-indigo-900 mb-2">Distribución del Saldo Remanente</h3>
+                            <Field id="dist-direccion" label="Dirección General (Diezmos de Diezmos)" />
+                            <Field id="dist-tesoreria" label="Tesorería (Cuenta de Remanentes)" />
+                            <Field id="dist-pro-construccion" label="Pro-Construcción" />
+                            <Field id="dist-otros" label="Otros" />
+                        </div>
+                        <div className="p-4 bg-gray-50 rounded-xl border space-y-3">
+                            <h3 className="text-lg font-bold text-indigo-900 mb-2">Cálculos en Tiempo Real</h3>
+                            <div className="flex justify-between items-center text-gray-700">
+                                <span>Saldo Inicial del Mes:</span>
+                                <span className="font-mono">{formatCurrency(calculations.saldoAnterior)}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-gray-700">
+                                <span>Total Ingresos del Mes:</span>
+                                <span className="font-mono">{formatCurrency(calculations.totalIngresos)}</span>
+                            </div>
+                            <div className="flex justify-between items-center font-bold text-lg text-indigo-900 border-t pt-2 mt-2">
+                                <span>Total Disponible del Mes:</span>
+                                <span className="font-mono">{formatCurrency(calculations.totalDisponible)}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-gray-700">
+                                <span>Total Salidas del Mes:</span>
+                                <span className="font-mono text-red-600">({formatCurrency(calculations.totalSalidas)})</span>
+                            </div>
+                            <div className="flex justify-between items-center font-bold text-xl text-white bg-blue-600 p-3 rounded-lg mt-2">
+                                <span>Utilidad o Remanente:</span>
+                                <span className="font-mono">{formatCurrency(calculations.remanente)}</span>
+                            </div>
+                        </div>
+                     </div>
+                </Accordion>
 
-                        <Subheading title="Nombres para Firmas de Comisión" />
-                        <Field id="comision-nombre-1" label="Nombre Firma 1" isCurrency={false} />
-                        <Field id="comision-nombre-2" label="Nombre Firma 2" isCurrency={false} />
-                        <Field id="comision-nombre-3" label="Nombre Firma 3" isCurrency={false} />
+                <Accordion title="5. Firmas">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <Field id="comision-nombre-1" label="Nombre Firma 1 (Comisión)" isCurrency={false} />
+                        <Field id="comision-nombre-2" label="Nombre Firma 2 (Comisión)" isCurrency={false} />
+                        <Field id="comision-nombre-3" label="Nombre Firma 3 (Comisión)" isCurrency={false} />
                     </div>
                 </Accordion>
             </form>
 
-            <Accordion title="5. Resumen de Totales" initialOpen>
-                <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
-                    <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Cálculos en Tiempo Real</h3>
-                    <div className="flex justify-between items-center">
-                        <span className="text-gray-600">Saldo del Mes Anterior:</span>
-                        <span className="font-bold text-lg text-gray-800">{formatCurrency(calculations.saldoAnterior)}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-green-700">
-                        <span className="font-semibold">Total Ingresos del Mes:</span>
-                        <span className="font-bold text-lg">{formatCurrency(calculations.totalIngresos)}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-blue-800 font-bold border-t pt-2">
-                        <span>Total Disponible (Saldo + Ingresos):</span>
-                        <span className="text-xl">{formatCurrency(calculations.totalDisponible)}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-red-600">
-                        <span className="font-semibold">Total Salidas del Mes:</span>
-                        <span className="font-bold text-lg">{formatCurrency(calculations.totalSalidas)}</span>
-                    </div>
-                    <div className="flex justify-between items-center p-3 mt-2 bg-indigo-100 rounded-md">
-                        <span className="font-bold text-indigo-900 text-lg">Remanente Final:</span>
-                        <span className="font-extrabold text-indigo-900 text-2xl">{formatCurrency(calculations.remanente)}</span>
-                    </div>
-                </div>
-            </Accordion>
-
              <div className="p-6 bg-white rounded-xl shadow-lg mt-6 space-y-4">
-                <h3 className="text-xl font-bold text-primary">Acciones del Informe</h3>
+                <h3 className="text-xl font-bold text-indigo-900">Acciones del Informe</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <button onClick={handleSaveReport} className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors">
                         <ArchiveBoxArrowDownIcon className="w-5 h-5" />
@@ -591,8 +577,36 @@ const InformeMensualTab: React.FC<InformeMensualTabProps> = ({ records, formulas
                         className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed sm:col-span-2 lg:col-span-1"
                     >
                         <DocumentArrowDownIcon className="w-5 h-5" />
-                        {isGenerating ? 'Generando...' : 'Generar Reporte en PDF'}
+                        {isGenerating ? 'Generando...' : 'Generar PDF y Subir a Drive'}
                     </button>
+                </div>
+            </div>
+
+            <div className="p-6 bg-white rounded-xl shadow-lg">
+                <h3 className="text-xl font-bold text-indigo-900 mb-4">Informes Guardados</h3>
+                <div className="space-y-3 max-h-60 overflow-y-auto p-1">
+                    {sortedReports.length > 0 ? (
+                        sortedReports.map(report => (
+                            <div key={report.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 rounded-lg border">
+                                <div>
+                                    <p className="font-semibold text-indigo-900">{MONTH_NAMES[report.month - 1]} {report.year}</p>
+                                    <p className="text-xs text-gray-500">ID: {report.id}</p>
+                                </div>
+                                <div className="flex items-center space-x-2 mt-2 sm:mt-0">
+                                    <button onClick={() => handleLoadReport(report)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors">
+                                        <ArrowUpOnSquareIcon className="w-4 h-4" />
+                                        Cargar
+                                    </button>
+                                    <button onClick={() => handleDeleteReport(report.id)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors">
+                                        <TrashIcon className="w-4 h-4" />
+                                        Eliminar
+                                    </button>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-center text-gray-500 py-2">No hay informes guardados.</p>
+                    )}
                 </div>
             </div>
         </div>
