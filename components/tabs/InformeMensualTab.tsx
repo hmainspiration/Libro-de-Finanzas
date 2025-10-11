@@ -1,8 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, FC, useEffect } from 'react';
 import { WeeklyRecord, Formulas, MonthlyReport, MonthlyReportFormState, ChurchInfo } from '../../types';
 import { MONTH_NAMES, initialMonthlyReportFormState } from '../../constants';
+import { ArrowUpOnSquareIcon, TrashIcon, ArchiveBoxArrowDownIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline';
 import { useDrive } from '../../context/GoogleDriveContext';
-import { ArrowDownTrayIcon, TrashIcon, CalculatorIcon } from '@heroicons/react/24/outline';
+
 
 interface InformeMensualTabProps {
     records: WeeklyRecord[];
@@ -12,142 +13,60 @@ interface InformeMensualTabProps {
     churchInfo: ChurchInfo;
 }
 
-const FormField: React.FC<{ label: string; name: keyof MonthlyReportFormState; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; type?: string; readOnly?: boolean; }> = 
-({ label, name, value, onChange, type = 'text', readOnly = false }) => (
-    <div>
-        <label htmlFor={name} className={`block text-sm font-medium ${readOnly ? 'text-gray-500' : 'text-gray-700'}`}>{label}</label>
-        <input 
-            type={type} 
-            id={name} 
-            name={name} 
-            value={value} 
-            onChange={onChange} 
-            readOnly={readOnly}
-            className={`mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm ${readOnly ? 'bg-gray-100' : ''}`}
-        />
+const Accordion: FC<{ title: string, children: React.ReactNode, initialOpen?: boolean }> = ({ title, children, initialOpen = false }) => {
+    const [isOpen, setIsOpen] = useState(initialOpen);
+
+    return (
+        <div className="bg-white rounded-xl shadow-md">
+            <button
+                type="button"
+                className="w-full p-5 text-left font-semibold text-lg flex justify-between items-center"
+                onClick={() => setIsOpen(!isOpen)}
+                aria-expanded={isOpen}
+            >
+                <span>{title}</span>
+                <svg className={`w-5 h-5 transform transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+            <div
+                className="overflow-hidden transition-all duration-300 ease-out"
+                style={{ maxHeight: isOpen ? '2500px' : '0' }}
+            >
+                <div className="px-5 pb-5 pt-4 border-t">
+                    {children}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const CurrencyInput: FC<{ id: string, placeholder: string, value: string, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }> = ({ id, placeholder, value, onChange }) => (
+    <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none">C$</span>
+        <input type="number" step="0.01" id={id} name={id} placeholder={placeholder} value={value} onChange={onChange} className="w-full p-2 border rounded-lg pl-10" />
     </div>
 );
 
-const InformeMensualTab: React.FC<InformeMensualTabProps> = ({
-    records,
-    formulas,
-    savedReports,
-    setSavedReports,
-    churchInfo,
-}) => {
+
+const InformeMensualTab: React.FC<InformeMensualTabProps> = ({ records, formulas, savedReports, setSavedReports, churchInfo }) => {
+    const [formState, setFormState] = useState(initialMonthlyReportFormState);
+    const [isGenerating, setIsGenerating] = useState(false);
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-    const [formData, setFormData] = useState<MonthlyReportFormState>(initialMonthlyReportFormState);
-    const [isProcessing, setIsProcessing] = useState(false);
     const drive = useDrive();
-
-    // FIX: Moved formatCurrency to component scope to be accessible throughout the component.
-    const formatCurrency = (val: string | number) => `C$ ${ (parseFloat(String(val)) || 0).toFixed(2) }`;
-
-    const calculatedData = useMemo(() => {
-        const monthlyRecords = records.filter(r => r.month === selectedMonth && r.year === selectedYear);
-        if (monthlyRecords.length === 0) return null;
-
-        const newFormData: Partial<MonthlyReportFormState> = {};
-        
-        const subtotals: Record<string, number> = {};
-        // FIX: The original logic for calculating subtotals was complex and caused a type error.
-        // It has been replaced with a simpler, more robust method that initializes and calculates in a single pass.
-        monthlyRecords.forEach(record => {
-            record.donations.forEach(donation => {
-                subtotals[donation.category] = (subtotals[donation.category] || 0) + donation.amount;
-            });
-        });
-
-        const activeMembers = new Set<string>();
-        monthlyRecords.forEach(record => {
-            record.donations.forEach(donation => {
-                if (!donation.memberName.includes('(')) {
-                    activeMembers.add(donation.memberName);
-                }
-            });
-        });
-        newFormData['miembros-activos'] = activeMembers.size.toString();
-        
-        // Asignación de ingresos a los campos correspondientes
-        newFormData['ing-diezmos'] = (subtotals['Diezmo'] || 0).toFixed(2);
-        newFormData['ing-ofrendas-ordinarias'] = (subtotals['Ordinaria'] || 0).toFixed(2);
-        newFormData['ing-primicias'] = (subtotals['Primicias'] || 0).toFixed(2);
-        newFormData['ing-ceremonial'] = (subtotals['Ceremonial'] || 0).toFixed(2);
-
-        const totalDiezmosYOrdinarias = (subtotals['Diezmo'] || 0) + (subtotals['Ordinaria'] || 0);
-
-        let totalDiezmoDeDiezmo = 0;
-        monthlyRecords.forEach(record => {
-            const weeklyTotal = record.donations
-                .filter(d => d.category === 'Diezmo' || d.category === 'Ordinaria')
-                .reduce((sum, d) => sum + d.amount, 0);
-            totalDiezmoDeDiezmo += Math.round(weeklyTotal * (record.formulas.diezmoPercentage / 100));
-        });
-
-        const gomerMinistro = totalDiezmosYOrdinarias - totalDiezmoDeDiezmo;
-
-        newFormData['egr-gomer'] = gomerMinistro.toFixed(2);
-        newFormData['egr-ceremonial'] = (subtotals['Ceremonial'] || 0).toFixed(2);
-        newFormData['dist-tesoreria'] = totalDiezmoDeDiezmo.toFixed(2);
-        
-        return newFormData;
-    }, [records, selectedMonth, selectedYear, formulas]);
-    
-    // Cálculos de resumen en tiempo real
-    const summaryCalculations = useMemo(() => {
-        const parse = (val: string | number) => parseFloat(String(val)) || 0;
-
-        const totalIngresos = 
-            parse(formData['ing-diezmos']) + parse(formData['ing-ofrendas-ordinarias']) + 
-            parse(formData['ing-primicias']) + parse(formData['ing-ayuda-encargado']) +
-            parse(formData['ing-ceremonial']) + parse(formData['ing-ofrenda-especial-sdd']) +
-            parse(formData['ing-evangelizacion']) + parse(formData['ing-santa-cena']) +
-            parse(formData['ing-servicios-publicos']) + parse(formData['ing-arreglos-locales']) +
-            parse(formData['ing-mantenimiento']) + parse(formData['ing-construccion-local']) +
-            parse(formData['ing-muebles']) + parse(formData['ing-viajes-ministro']) +
-            parse(formData['ing-reuniones-ministeriales']) + parse(formData['ing-atencion-ministros']) +
-            parse(formData['ing-viajes-extranjero']) + parse(formData['ing-actividades-locales']) +
-            parse(formData['ing-ciudad-lldm']) + parse(formData['ing-adquisicion-terreno']);
-        
-        const totalManutencion = parse(formData['egr-asignacion']) + parse(formData['egr-gomer']);
-
-        const totalSalidas = 
-            totalManutencion +
-            parse(formData['egr-ceremonial']) + parse(formData['egr-ofrenda-especial-sdd']) +
-            parse(formData['egr-evangelizacion']) + parse(formData['egr-santa-cena']) +
-            parse(formData['egr-servicios-publicos']) + parse(formData['egr-arreglos-locales']) +
-            parse(formData['egr-mantenimiento']) + parse(formData['egr-traspaso-construccion']) +
-            parse(formData['egr-muebles']) + parse(formData['egr-viajes-ministro']) +
-            parse(formData['egr-reuniones-ministeriales']) + parse(formData['egr-atencion-ministros']) +
-            parse(formData['egr-viajes-extranjero']) + parse(formData['egr-actividades-locales']) +
-            parse(formData['egr-ciudad-lldm']) + parse(formData['egr-adquisicion-terreno']);
-
-        const totalDisponible = parse(formData['saldo-anterior']) + totalIngresos;
-        const utilidadRemanente = totalDisponible - totalSalidas;
-        
-        return {
-            totalIngresos,
-            totalSalidas,
-            totalDisponible,
-            utilidadRemanente,
-            totalManutencion
-        };
-    }, [formData]);
-
 
     useEffect(() => {
         const reportId = `report-${selectedYear}-${selectedMonth}`;
         const existingReport = savedReports.find(r => r.id === reportId);
         if (existingReport) {
-            setFormData(existingReport.formData);
+            setFormState(existingReport.formData);
         } else {
-            setFormData({
+            // Reset to initial state with church info defaults
+            setFormState({
                 ...initialMonthlyReportFormState,
                 'mes-reporte': MONTH_NAMES[selectedMonth - 1],
                 'ano-reporte': selectedYear.toString(),
-                'clave-iglesia': 'NIMT02', // Valor por defecto
-                'nombre-iglesia': 'La Empresa', // Valor por defecto
+                'clave-iglesia': 'NIMT02',
+                'nombre-iglesia': 'La Empresa',
                 'nombre-ministro': churchInfo.defaultMinister,
                 'grado-ministro': churchInfo.ministerGrade,
                 'distrito': churchInfo.district,
@@ -157,296 +76,524 @@ const InformeMensualTab: React.FC<InformeMensualTabProps> = ({
         }
     }, [selectedMonth, selectedYear, savedReports, churchInfo]);
 
-    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            [name as keyof MonthlyReportFormState]: value,
-        }));
-    };
-    
-    const handlePrefill = () => {
-        if (calculatedData) {
-            setFormData(prev => ({
-                ...prev,
-                ...calculatedData,
-            }));
-            alert('Formulario actualizado con los datos calculados del mes.');
-        } else {
-            alert('No hay registros de ofrendas para el mes seleccionado.');
-        }
+        setFormState(prevState => ({ ...prevState, [name]: value }));
     };
 
+    const getNumericValue = (key: keyof typeof initialMonthlyReportFormState) => parseFloat(formState[key]) || 0;
+
+    const handleLoadData = () => {
+        const filteredRecords = records.filter(r => r.month === selectedMonth && r.year === selectedYear);
+        if (filteredRecords.length === 0) {
+            alert(`No se encontraron registros para ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear}.`);
+            return;
+        }
+
+        const publicServiceCategories = ["Luz", "Agua"];
+        let totalDiezmo = 0, totalOrdinaria = 0, totalServicios = 0, totalGomer = 0, totalDiezmoDeDiezmo = 0;
+
+        filteredRecords.forEach(record => {
+            let weeklyDiezmo = 0, weeklyOrdinaria = 0;
+            record.donations.forEach(d => {
+                if (d.category === "Diezmo") weeklyDiezmo += d.amount;
+                if (d.category === "Ordinaria") weeklyOrdinaria += d.amount;
+                if (publicServiceCategories.includes(d.category)) totalServicios += d.amount;
+            });
+
+            totalDiezmo += weeklyDiezmo;
+            totalOrdinaria += weeklyOrdinaria;
+
+            const weeklyTotal = weeklyDiezmo + weeklyOrdinaria;
+            const weeklyDiezmoDeDiezmo = Math.round(weeklyTotal * (record.formulas.diezmoPercentage / 100));
+            
+            totalDiezmoDeDiezmo += weeklyDiezmoDeDiezmo;
+            totalGomer += Math.round(weeklyTotal - weeklyDiezmoDeDiezmo);
+        });
+
+        setFormState(prev => ({
+            ...prev,
+            'ing-diezmos': totalDiezmo > 0 ? totalDiezmo.toFixed(2) : '',
+            'ing-ofrendas-ordinarias': totalOrdinaria > 0 ? totalOrdinaria.toFixed(2) : '',
+            'ing-servicios-publicos': totalServicios > 0 ? totalServicios.toFixed(2) : '',
+            'egr-servicios-publicos': totalServicios > 0 ? totalServicios.toFixed(2) : '',
+            'egr-gomer': totalGomer > 0 ? totalGomer.toFixed(2) : '',
+            'dist-direccion': totalDiezmoDeDiezmo > 0 ? totalDiezmoDeDiezmo.toFixed(2) : '',
+            'egr-asignacion': formulas.remanenteThreshold.toString(),
+        }));
+         alert(`Datos cargados para ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear}.`);
+    };
+
+    const calculations = useMemo(() => {
+        const ingOfrendas = ['ing-diezmos', 'ing-ofrendas-ordinarias', 'ing-primicias', 'ing-ayuda-encargado'].reduce((sum, key) => sum + getNumericValue(key as keyof typeof initialMonthlyReportFormState), 0);
+        const ingEspeciales = ['ing-ceremonial', 'ing-ofrenda-especial-sdd', 'ing-evangelizacion', 'ing-santa-cena'].reduce((sum, key) => sum + getNumericValue(key as keyof typeof initialMonthlyReportFormState), 0);
+        const ingLocales = [
+            'ing-servicios-publicos', 'ing-arreglos-locales', 'ing-mantenimiento', 'ing-construccion-local',
+            'ing-muebles', 'ing-viajes-ministro', 'ing-reuniones-ministeriales', 'ing-atencion-ministros',
+            'ing-viajes-extranjero', 'ing-actividades-locales', 'ing-ciudad-lldm', 'ing-adquisicion-terreno'
+        ].reduce((sum, key) => sum + getNumericValue(key as keyof typeof initialMonthlyReportFormState), 0);
+        
+        const totalIngresos = ingOfrendas + ingEspeciales + ingLocales;
+        const saldoAnterior = getNumericValue('saldo-anterior');
+        const totalDisponible = saldoAnterior + totalIngresos;
+
+        const totalManutencion = getNumericValue('egr-asignacion') - getNumericValue('egr-gomer');
+        const egrEspeciales = ['egr-ceremonial', 'egr-ofrenda-especial-sdd', 'egr-evangelizacion', 'egr-santa-cena'].reduce((sum, key) => sum + getNumericValue(key as keyof typeof initialMonthlyReportFormState), 0);
+        const egrLocales = [
+            'egr-servicios-publicos', 'egr-arreglos-locales', 'egr-mantenimiento', 'egr-traspaso-construccion',
+            'egr-muebles', 'egr-viajes-ministro', 'egr-reuniones-ministeriales', 'egr-atencion-ministros',
+            'egr-viajes-extranjero', 'egr-actividades-locales', 'egr-ciudad-lldm', 'egr-adquisicion-terreno'
+        ].reduce((sum, key) => sum + getNumericValue(key as keyof typeof initialMonthlyReportFormState), 0);
+
+        const totalSalidas = getNumericValue('egr-gomer') + egrEspeciales + egrLocales;
+        const remanente = totalDisponible - totalSalidas;
+
+        return {
+            ingOfrendas, ingEspeciales, ingLocales, totalIngresos, saldoAnterior, totalDisponible,
+            totalManutencion, egrEspeciales, egrLocales, totalSalidas, remanente
+        };
+    }, [formState]);
+
+    const formatCurrency = (value: number) => `C$ ${value.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    const handleClearForm = () => {
+        if (window.confirm('¿Estás seguro de que quieres limpiar todos los campos?')) {
+            setFormState(initialMonthlyReportFormState);
+        }
+    };
+    
     const handleSaveReport = () => {
         const reportId = `report-${selectedYear}-${selectedMonth}`;
-        const newReport: MonthlyReport = { id: reportId, month: selectedMonth, year: selectedYear, formData };
-        setSavedReports(prev => {
-            const existingIndex = prev.findIndex(r => r.id === reportId);
-            if (existingIndex > -1) {
-                const updated = [...prev];
-                updated[existingIndex] = newReport;
-                return updated;
+        const existingReportIndex = savedReports.findIndex(r => r.id === reportId);
+
+        if (existingReportIndex > -1) {
+            if (!window.confirm('Ya existe un informe para este mes. ¿Desea sobrescribirlo?')) {
+                return;
             }
-            return [...prev, newReport].sort((a,b) => new Date(b.year, b.month-1).getTime() - new Date(a.year, a.month-1).getTime());
-        });
-        alert('Reporte guardado localmente.');
+        }
+
+        const newReport: MonthlyReport = {
+            id: reportId,
+            month: selectedMonth,
+            year: selectedYear,
+            formData: formState,
+        };
+
+        if (existingReportIndex > -1) {
+            const updatedReports = [...savedReports];
+            updatedReports[existingReportIndex] = newReport;
+            setSavedReports(updatedReports);
+        } else {
+            setSavedReports(prev => [...prev, newReport]);
+        }
+
+        alert('Informe guardado exitosamente.');
+    };
+
+    const handleLoadReport = (report: MonthlyReport) => {
+        const defaultInitialState = {
+            ...initialMonthlyReportFormState,
+            'mes-reporte': MONTH_NAMES[selectedMonth - 1],
+            'ano-reporte': selectedYear.toString(),
+            'clave-iglesia': 'NIMT02',
+            'nombre-iglesia': 'La Empresa',
+            'nombre-ministro': churchInfo.defaultMinister,
+            'grado-ministro': churchInfo.ministerGrade,
+            'distrito': churchInfo.district,
+            'departamento': churchInfo.department,
+            'tel-ministro': churchInfo.ministerPhone,
+        };
+        const isDirty = JSON.stringify(formState) !== JSON.stringify(defaultInitialState) && JSON.stringify(formState) !== JSON.stringify(initialMonthlyReportFormState);
+        
+        if (isDirty && !window.confirm('¿Está seguro de que desea cargar este informe? Los datos actuales del formulario se perderán.')) {
+            return;
+        }
+        setFormState(report.formData);
+        setSelectedMonth(report.month);
+        setSelectedYear(report.year);
+        alert(`Informe de ${MONTH_NAMES[report.month - 1]} ${report.year} cargado.`);
     };
 
     const handleDeleteReport = (reportId: string) => {
-        if (window.confirm("¿Está seguro de que desea eliminar este informe guardado?")) {
+        if (window.confirm('¿Está seguro de que desea eliminar este informe guardado?')) {
             setSavedReports(prev => prev.filter(r => r.id !== reportId));
         }
     };
 
-    const handleExportAndUpload = async () => {
-        setIsProcessing(true);
-        try {
-            const { jsPDF } = (window as any).jspdf;
-            const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-            
-            const centeredText = (text: string, y: number, size: number, style: 'normal' | 'bold' = 'normal') => {
-                doc.setFontSize(size);
-                doc.setFont('helvetica', style);
-                const textWidth = doc.getStringUnitWidth(text) * doc.internal.getFontSize() / doc.internal.scaleFactor;
-                const textOffset = (doc.internal.pageSize.getWidth() - textWidth) / 2;
-                doc.text(text, textOffset, y);
-            };
+    const sortedReports = useMemo(() => {
+        return [...savedReports].sort((a, b) => {
+            const dateA = new Date(a.year, a.month - 1);
+            const dateB = new Date(b.year, b.month - 1);
+            return dateB.getTime() - dateA.getTime();
+        });
+    }, [savedReports]);
 
-            // === PDF HEADER ===
-            centeredText("IGLESIA DEL DIOS VIVO COLUMNA Y APOYO DE LA VERDAD", 15, 12, 'bold');
-            centeredText("La Luz del Mundo", 20, 10);
-            centeredText("MINISTERIO DE ADMINISTRACIÓN FINANCIERA", 25, 11, 'bold');
-            centeredText("INFORMACIÓN FINANCIERA MENSUAL", 30, 12, 'bold');
-            centeredText("Jurisdicción Nicaragua, C.A.", 35, 10);
+    const generateAndSavePdf = () => {
+        setIsGenerating(true);
+        setTimeout(async () => {
+            try {
+                const { jsPDF } = (window as any).jspdf;
+                const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+                const pageW = doc.internal.pageSize.getWidth();
+                const pageH = doc.internal.pageSize.getHeight();
+                const margin = 10;
+                let startY = margin;
+                const getText = (key: keyof typeof initialMonthlyReportFormState) => formState[key] || '';
+                const getValue = (key: keyof typeof initialMonthlyReportFormState) => formatCurrency(getNumericValue(key));
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(12);
+                doc.text("IGLESIA DEL DIOS VIVO COLUMNA Y APOYO DE LA VERDAD", pageW / 2, startY + 5, { align: 'center' });
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(11);
+                doc.text("La Luz del Mundo", pageW / 2, startY + 10, { align: 'center' });
+                doc.setFontSize(10);
+                doc.text("MINISTERIO DE ADMINISTRACIÓN FINANCIERA", pageW / 2, startY + 16, { align: 'center' });
+                doc.setFont('helvetica', 'bold');
+                doc.text("INFORMACIÓN FINANCIERA MENSUAL", pageW / 2, startY + 22, { align: 'center' });
+                doc.setFont('helvetica', 'normal');
+                doc.text(`Jurisdicción Nicaragua, C.A.`, pageW / 2, startY + 27, { align: 'center' });
+                startY += 35;
+                const bodyStyle = { fontSize: 8, cellPadding: 1, lineColor: '#000', lineWidth: 0.1 };
+                const headStyle = { fontSize: 8, fontStyle: 'bold', fillColor: '#f0f0f0', textColor: '#333', halign: 'center', lineColor: '#000', lineWidth: 0.1 };
+                const rightAlign = { halign: 'right' };
+                const subheadStyle = { fontStyle: 'bold', fillColor: '#ffffff' };
+                (doc as any).autoTable({
+                    startY: startY,
+                    body: [
+                        [{ content: 'DATOS DE ESTE INFORME', colSpan: 4, styles: headStyle }],
+                        ['DEL MES DE:', getText('mes-reporte'), 'DEL AÑO:', getText('ano-reporte')],
+                        ['CLAVE IGLESIA:', getText('clave-iglesia'), 'NOMBRE IGLESIA:', getText('nombre-iglesia')],
+                        ['DISTRITO:', getText('distrito'), 'DEPARTAMENTO:', getText('departamento')],
+                        ['NOMBRE MINISTRO:', getText('nombre-ministro'), 'GRADO:', getText('grado-ministro')],
+                        ['TELÉFONO:', getText('tel-ministro'), 'MIEMBROS ACTIVOS:', getText('miembros-activos')],
+                    ],
+                    theme: 'grid', styles: { ...bodyStyle, fontSize: 9, cellPadding: 1.5 }, columnStyles: { 0: { fontStyle: 'bold' }, 2: { fontStyle: 'bold' } }
+                });
+                startY = (doc as any).autoTable.previous.finalY + 3;
+                const ingresosData = [
+                    [{ content: 'Ingresos por Ofrendas', styles: subheadStyle }, ''],
+                    ['Diezmos', { content: getValue('ing-diezmos'), styles: rightAlign }],
+                    ['Ofrendas Ordinarias', { content: getValue('ing-ofrendas-ordinarias'), styles: rightAlign }],
+                    ['Primicias', { content: getValue('ing-primicias'), styles: rightAlign }],
+                    ['Ayuda al Encargado', { content: getValue('ing-ayuda-encargado'), styles: rightAlign }],
+                    [{ content: 'Ingresos por Colectas Especiales', styles: subheadStyle }, ''],
+                    ['Ceremonial', { content: getValue('ing-ceremonial'), styles: rightAlign }],
+                    ['Ofrenda Especial SdD NJG', { content: getValue('ing-ofrenda-especial-sdd'), styles: rightAlign }],
+                    ['Evangelización Mundial', { content: getValue('ing-evangelizacion'), styles: rightAlign }],
+                    ['Colecta de Santa Cena', { content: getValue('ing-santa-cena'), styles: rightAlign }],
+                    [{ content: 'Ingresos por Colectas Locales', styles: subheadStyle }, ''],
+                    ['Pago de Servicios Públicos', { content: getValue('ing-servicios-publicos'), styles: rightAlign }],
+                    ['Arreglos Locales', { content: getValue('ing-arreglos-locales'), styles: rightAlign }],
+                    ['Mantenimiento y Conservación', { content: getValue('ing-mantenimiento'), styles: rightAlign }],
+                    ['Construcción Local', { content: getValue('ing-construccion-local'), styles: rightAlign }],
+                    ['Muebles y Artículos', { content: getValue('ing-muebles'), styles: rightAlign }],
+                    ['Viajes y viáticos para Ministro', { content: getValue('ing-viajes-ministro'), styles: rightAlign }],
+                    ['Reuniones Ministeriales', { content: getValue('ing-reuniones-ministeriales'), styles: rightAlign }],
+                    ['Atención a Ministros', { content: getValue('ing-atencion-ministros'), styles: rightAlign }],
+                    ['Viajes fuera del País', { content: getValue('ing-viajes-extranjero'), styles: rightAlign }],
+                    ['Actividades Locales', { content: getValue('ing-actividades-locales'), styles: rightAlign }],
+                    ['Ofrendas para Ciudad LLDM', { content: getValue('ing-ciudad-lldm'), styles: rightAlign }],
+                    ['Adquisición Terreno/Edificio', { content: getValue('ing-adquisicion-terreno'), styles: rightAlign }],
+                ];
+                const egresosData = [
+                    [{ content: 'Manutención del Ministro', styles: subheadStyle }, ''],
+                    ['Asignación Autorizada', { content: getValue('egr-asignacion'), styles: rightAlign }],
+                    ['Gomer del Mes', { content: getValue('egr-gomer'), styles: rightAlign }],
+                    [{ content: 'Total Manutención (Asignación - Gomer)', styles: { fontStyle: 'bold' } }, { content: formatCurrency(calculations.totalManutencion), styles: { ...rightAlign, fontStyle: 'bold' } }],
+                    [{ content: 'Egresos por Colectas Especiales', styles: subheadStyle }, ''],
+                    ['Ceremonial', { content: getValue('egr-ceremonial'), styles: rightAlign }],
+                    ['Ofrenda Especial SdD NJG', { content: getValue('egr-ofrenda-especial-sdd'), styles: rightAlign }],
+                    ['Evangelización Mundial', { content: getValue('egr-evangelizacion'), styles: rightAlign }],
+                    ['Colecta de Santa Cena', { content: getValue('egr-santa-cena'), styles: rightAlign }],
+                    [{ content: 'Egresos por Colectas Locales', styles: subheadStyle }, ''],
+                    ['Pago de Servicios Públicos', { content: getValue('egr-servicios-publicos'), styles: rightAlign }],
+                    ['Arreglos Locales', { content: getValue('egr-arreglos-locales'), styles: rightAlign }],
+                    ['Mantenimiento y Conservación', { content: getValue('egr-mantenimiento'), styles: rightAlign }],
+                    ['Traspaso para Construcción Local', { content: getValue('egr-traspaso-construccion'), styles: rightAlign }],
+                    ['Muebles y Artículos', { content: getValue('egr-muebles'), styles: rightAlign }],
+                    ['Viajes y viáticos para Ministro', { content: getValue('egr-viajes-ministro'), styles: rightAlign }],
+                    ['Reuniones Ministeriales', { content: getValue('egr-reuniones-ministeriales'), styles: rightAlign }],
+                    ['Atención a Ministros', { content: getValue('egr-atencion-ministros'), styles: rightAlign }],
+                    ['Viajes fuera del País', { content: getValue('egr-viajes-extranjero'), styles: rightAlign }],
+                    ['Actividades Locales', { content: getValue('egr-actividades-locales'), styles: rightAlign }],
+                    ['Ofrendas para Ciudad LLDM', { content: getValue('egr-ciudad-lldm'), styles: rightAlign }],
+                    ['Adquisición Terreno/Edificio', { content: getValue('egr-adquisicion-terreno'), styles: rightAlign }],
+                ];
+                const tableConfig = { theme: 'grid', styles: bodyStyle, headStyles: headStyle };
+                const tableStartY = startY;
+                let finalYIngresos, finalYEgresos;
+                (doc as any).autoTable({ head: [['ENTRADAS (INGRESOS)', '']], body: ingresosData, startY: tableStartY, ...tableConfig, tableWidth: (pageW / 2) - margin - 1, margin: { left: margin }, });
+                finalYIngresos = (doc as any).autoTable.previous.finalY;
+                (doc as any).autoTable({ head: [['SALIDAS (EGRESOS)', '']], body: egresosData, startY: tableStartY, ...tableConfig, tableWidth: (pageW / 2) - margin - 1, margin: { left: pageW / 2 + 1 }, });
+                finalYEgresos = (doc as any).autoTable.previous.finalY;
+                startY = Math.max(finalYIngresos, finalYEgresos) + 3;
+                const resumenData = [
+                    ['Saldo Inicial del Mes', { content: formatCurrency(calculations.saldoAnterior), styles: rightAlign }],
+                    ['Total Ingresos del Mes', { content: formatCurrency(calculations.totalIngresos), styles: rightAlign }],
+                    [{ content: 'Total Disponible del Mes', styles: { fontStyle: 'bold' } }, { content: formatCurrency(calculations.totalDisponible), styles: { ...rightAlign, fontStyle: 'bold' } }],
+                    ['Total Salidas del Mes', { content: formatCurrency(calculations.totalSalidas), styles: rightAlign }],
+                    [{ content: 'Utilidad o Remanente', styles: { fontStyle: 'bold', fillColor: '#e0e7ff' } }, { content: formatCurrency(calculations.remanente), styles: { ...rightAlign, fontStyle: 'bold', fillColor: '#e0e7ff' } }],
+                ];
+                const distribucionData = [
+                    ['Dirección General (Diezmos de Diezmos)', { content: getValue('dist-direccion'), styles: rightAlign }],
+                    ['Tesorería (Cuenta de Remanentes)', { content: getValue('dist-tesoreria'), styles: rightAlign }],
+                    ['Pro-Construcción', { content: getValue('dist-pro-construccion'), styles: rightAlign }],
+                    ['Otros', { content: getValue('dist-otros'), styles: rightAlign }],
+                ];
+                if (startY > pageH - 65) { doc.addPage(); startY = margin; }
+                const summaryTableStartY = startY;
+                let finalYResumen, finalYDistribucion;
+                (doc as any).autoTable({ head: [['RESUMEN Y CIERRE', '']], body: resumenData, startY: summaryTableStartY, ...tableConfig, tableWidth: (pageW / 2) - margin - 1, margin: { left: margin }, });
+                finalYResumen = (doc as any).autoTable.previous.finalY;
+                (doc as any).autoTable({ head: [['SALDO DEL REMANENTE DISTRIBUIDO A:', '']], body: distribucionData, startY: summaryTableStartY, ...tableConfig, tableWidth: (pageW / 2) - margin - 1, margin: { left: pageW / 2 + 1 }, });
+                finalYDistribucion = (doc as any).autoTable.previous.finalY;
+                startY = Math.max(finalYResumen, finalYDistribucion) + 10;
+                if (startY > pageH - 55) { doc.addPage(); startY = margin; }
+                (doc as any).autoTable({
+                    startY,
+                    body: [
+                        [{ content: 'Comisión Local de Finanzas:', colSpan: 3, styles: { fontStyle: 'bold', halign: 'center' } }],
+                        ['\n\n_________________________', '\n\n_________________________', '\n\n_________________________'],
+                        [getText('comision-nombre-1') || 'Firma 1', getText('comision-nombre-2') || 'Firma 2', getText('comision-nombre-3') || 'Firma 3'],
+                        [{ content: '', colSpan: 3, styles: { cellPadding: 4 } }],
+                        ['\n\n_________________________', '\n\n_________________________', ''],
+                        [`Firma Ministro: ${getText('nombre-ministro')}`, `Firma Tesorero(a) Local`, ''],
+                    ],
+                    theme: 'plain', styles: { fontSize: 9, halign: 'center' }
+                });
+                
+                const mes = getText('mes-reporte') || 'Mes';
+                const anio = getText('ano-reporte') || 'Año';
+                const iglesia = getText('nombre-iglesia') || 'Iglesia';
+                const pdfFileName = `${mes}-${anio}-${iglesia}.pdf`;
 
-            // === DATOS DE ESTE INFORME ===
-            (doc as any).autoTable({
-                startY: 40,
-                theme: 'grid',
-                styles: { fontSize: 8, cellPadding: 1.5 },
-                headStyles: { fillColor: [200, 200, 200], textColor: 0, fontStyle: 'bold', halign: 'center' },
-                columnStyles: { 0: { fontStyle: 'bold' }, 2: { fontStyle: 'bold' } },
-                body: [
-                    [{ content: 'DATOS DE ESTE INFORME', colSpan: 4, styles: { halign: 'center' } }],
-                    ['DEL MES DE:', formData['mes-reporte'], 'DEL AÑO:', formData['ano-reporte']],
-                    ['CLAVE IGLESIA:', formData['clave-iglesia'], 'NOMBRE IGLESIA:', formData['nombre-iglesia']],
-                    ['DISTRITO:', formData['distrito'], 'DEPARTAMENTO:', formData['departamento']],
-                    ['NOMBRE MINISTRO:', formData['nombre-ministro'], 'GRADO:', formData['grado-ministro']],
-                    ['TELÉFONO:', formData['tel-ministro'], 'MIEMBROS ACTIVOS:', formData['miembros-activos']],
-                ],
-            });
+                doc.save(pdfFileName);
 
-            // === ENTRADAS Y SALIDAS ===
-            
-            const mainBody = [
-                // Entradas
-                [{ content: 'ENTRADAS (INGRESOS)', styles: { fontStyle: 'bold', halign: 'left', fillColor: [230, 230, 230] } }, '', { content: 'SALIDAS (EGRESOS)', styles: { fontStyle: 'bold', halign: 'left', fillColor: [230, 230, 230] } }, ''],
-                [{ content: 'Ingresos por Ofrendas', colSpan: 2, styles: { fontStyle: 'bold' } }, { content: 'Manutención del Ministro', colSpan: 2, styles: { fontStyle: 'bold' } }],
-                ['Diezmos', formatCurrency(formData['ing-diezmos']), 'Asignación Autorizada', formatCurrency(formData['egr-asignacion'])],
-                ['Ofrendas Ordinarias', formatCurrency(formData['ing-ofrendas-ordinarias']), 'Gomer del Mes', formatCurrency(formData['egr-gomer'])],
-                ['Primicias', formatCurrency(formData['ing-primicias']), { content: 'Total Manutención (Asignación - Gomer)', styles: { fontStyle: 'bold' } }, { content: formatCurrency(summaryCalculations.totalManutencion), styles: { fontStyle: 'bold' } }],
-                ['Ayuda al Encargado', formatCurrency(formData['ing-ayuda-encargado']), '', ''],
-                [{ content: 'Ingresos por Colectas Especiales', colSpan: 2, styles: { fontStyle: 'bold' } }, { content: 'Egresos por Colectas Especiales', colSpan: 2, styles: { fontStyle: 'bold' } }],
-                ['Ceremonial', formatCurrency(formData['ing-ceremonial']), 'Ceremonial', formatCurrency(formData['egr-ceremonial'])],
-                ['Ofrenda Especial SdD NJG', formatCurrency(formData['ing-ofrenda-especial-sdd']), 'Ofrenda Especial SdD NJG', formatCurrency(formData['egr-ofrenda-especial-sdd'])],
-                ['Evangelización Mundial', formatCurrency(formData['ing-evangelizacion']), 'Evangelización Mundial', formatCurrency(formData['egr-evangelizacion'])],
-                ['Colecta de Santa Cena', formatCurrency(formData['ing-santa-cena']), 'Colecta de Santa Cena', formatCurrency(formData['egr-santa-cena'])],
-                [{ content: 'Ingresos por Colectas Locales', colSpan: 2, styles: { fontStyle: 'bold' } }, { content: 'Egresos por Colectas Locales', colSpan: 2, styles: { fontStyle: 'bold' } }],
-                ['Pago de Servicios Públicos', formatCurrency(formData['ing-servicios-publicos']), 'Pago de Servicios Públicos', formatCurrency(formData['egr-servicios-publicos'])],
-                ['Arreglos Locales', formatCurrency(formData['ing-arreglos-locales']), 'Arreglos Locales', formatCurrency(formData['egr-arreglos-locales'])],
-                ['Mantenimiento y Conservación', formatCurrency(formData['ing-mantenimiento']), 'Mantenimiento y Conservación', formatCurrency(formData['egr-mantenimiento'])],
-                ['Construcción Local', formatCurrency(formData['ing-construccion-local']), 'Traspaso para Construcción Local', formatCurrency(formData['egr-traspaso-construccion'])],
-                ['Muebles y Artículos', formatCurrency(formData['ing-muebles']), 'Muebles y Artículos', formatCurrency(formData['egr-muebles'])],
-                ['Viajes y viáticos para Ministro', formatCurrency(formData['ing-viajes-ministro']), 'Viajes y viáticos para Ministro', formatCurrency(formData['egr-viajes-ministro'])],
-                ['Reuniones Ministeriales', formatCurrency(formData['ing-reuniones-ministeriales']), 'Reuniones Ministeriales', formatCurrency(formData['egr-reuniones-ministeriales'])],
-                ['Atención a Ministros', formatCurrency(formData['ing-atencion-ministros']), 'Atención a Ministros', formatCurrency(formData['egr-atencion-ministros'])],
-                ['Viajes fuera del País', formatCurrency(formData['ing-viajes-extranjero']), 'Viajes fuera del País', formatCurrency(formData['egr-viajes-extranjero'])],
-                ['Actividades Locales', formatCurrency(formData['ing-actividades-locales']), 'Actividades Locales', formatCurrency(formData['egr-actividades-locales'])],
-                ['Ofrendas para Ciudad LLDM', formatCurrency(formData['ing-ciudad-lldm']), 'Ofrendas para Ciudad LLDM', formatCurrency(formData['egr-ciudad-lldm'])],
-                ['Adquisición Terreno/Edificio', formatCurrency(formData['ing-adquisicion-terreno']), 'Adquisición Terreno/Edificio', formatCurrency(formData['egr-adquisicion-terreno'])],
-            ];
-            
-            (doc as any).autoTable({
-                startY: (doc as any).lastAutoTable.finalY + 5,
-                theme: 'grid',
-                styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' },
-                columnStyles: { 1: { halign: 'right' }, 3: { halign: 'right' } },
-                body: mainBody,
-            });
-
-            // === RESUMEN Y CIERRE ===
-            (doc as any).autoTable({
-                startY: (doc as any).lastAutoTable.finalY + 5,
-                theme: 'grid',
-                styles: { fontSize: 8, cellPadding: 1.5 },
-                columnStyles: { 1: { halign: 'right', fontStyle: 'bold' }, 3: { halign: 'right', fontStyle: 'bold' } },
-                body: [
-                    [{ content: 'RESUMEN Y CIERRE', styles: { fontStyle: 'bold', halign: 'left', fillColor: [230, 230, 230] } }, '', { content: 'SALDO DEL REMANENTE DISTRIBUIDO A:', styles: { fontStyle: 'bold', halign: 'left', fillColor: [230, 230, 230] } }, ''],
-                    ['Saldo Inicial del Mes', formatCurrency(formData['saldo-anterior']), 'Dirección General (Diezmos de Diezmos)', formatCurrency(formData['dist-direccion'])],
-                    ['Total Ingresos del Mes', formatCurrency(summaryCalculations.totalIngresos), 'Tesorería (Cuenta de Remanentes)', formatCurrency(formData['dist-tesoreria'])],
-                    ['Total Disponible del Mes', formatCurrency(summaryCalculations.totalDisponible), 'Pro-Construcción', formatCurrency(formData['dist-pro-construccion'])],
-                    ['Total Salidas del Mes', formatCurrency(summaryCalculations.totalSalidas), 'Otros', formatCurrency(formData['dist-otros'])],
-                    [{ content: 'Utilidad o Remanente', styles: { fontStyle: 'bold' } }, formatCurrency(summaryCalculations.utilidadRemanente), '', ''],
-                ],
-                willDrawCell: (data: any) => {
-                    if (data.section === 'body' && data.row.index === 5) { // Utilidad o Remanente row
-                        doc.setFillColor(220, 237, 250); // Light blue
-                    }
+                if (drive.isAuthenticated) {
+                    const pdfBlob = doc.output('blob');
+                    await drive.uploadMonthlyReport(pdfFileName, pdfBlob);
+                    alert(`Informe mensual guardado exitosamente en Google Drive: ${pdfFileName}`);
+                } else {
+                     alert("El guardado en Google Drive está deshabilitado. Por favor, cargue las credenciales en el Panel de Administración.");
                 }
-            });
 
-            // === PAGE 2: SIGNATURES ===
-            doc.addPage();
-            centeredText("Comisión Local de Finanzas:", 30, 11, 'bold');
-            const lineY = 60;
-            const textY = lineY + 5;
-            doc.line(20, lineY, 80, lineY);
-            doc.text("Firma 1", 45, textY, { align: 'center' });
-
-            doc.line(130, lineY, 190, lineY);
-            doc.text("Firma 2", 155, textY, { align: 'center' });
-            
-            const lineY2 = 100;
-            const textY2 = lineY2 + 5;
-            doc.line(20, lineY2, 80, lineY2);
-            doc.text(`Firma Ministro: ${formData['nombre-ministro'] || ''}`, 50, textY2, { align: 'center' });
-
-            doc.line(130, lineY2, 190, lineY2);
-            doc.text("Firma Tesorero(a) Local", 160, textY2, { align: 'center' });
-
-
-            // Save and Upload
-            const fileName = `Informe-${formData['mes-reporte'].replace(' ', '_')}-${formData['ano-reporte']}.pdf`;
-            const pdfBlob = doc.output('blob');
-
-            doc.save(fileName);
-
-            if (drive.isAuthenticated) {
-                await drive.uploadMonthlyReport(fileName, pdfBlob);
-                alert(`Informe mensual subido a Google Drive: ${fileName}`);
-            } else {
-                alert("No conectado a Google Drive. El archivo se descargó localmente pero no fue subido.");
+            } catch (error) {
+                console.error("Error generating or uploading PDF:", error);
+                alert(`Hubo un error al generar o guardar el PDF: ${error instanceof Error ? error.message : String(error)}`);
+            } finally {
+                setIsGenerating(false);
             }
-
-        } catch (err) {
-            alert(`Error al generar o subir el PDF: ${err instanceof Error ? err.message : String(err)}`);
-        } finally {
-            setIsProcessing(false);
-        }
+        }, 100);
     };
+    
+    // Helper components for building the form
+    const Field = ({ id, label, isCurrency = true }: { id: keyof MonthlyReportFormState; label: string; isCurrency?: boolean }) => (
+        <div>
+            <label htmlFor={id} className="block text-sm font-medium text-gray-600 mb-1">{label}</label>
+            {isCurrency ? (
+                <CurrencyInput id={id} placeholder="0.00" value={formState[id]} onChange={handleChange} />
+            ) : (
+                <input type="text" id={id} name={id} value={formState[id]} onChange={handleChange} placeholder={label} className="w-full p-2 border rounded-lg" />
+            )}
+        </div>
+    );
+    const Subheading = ({ title }: { title: string }) => <h4 className="md:col-span-2 font-semibold text-gray-800 mb-2 mt-4 border-b pb-1">{title}</h4>;
 
 
     return (
-        <div className="space-y-8">
-            <h2 className="text-2xl font-bold text-indigo-900">Informe Mensual de Finanzas</h2>
-            
-            {/* ... SELECTION AND CALCULATION ... */}
-            <div className="p-6 bg-white rounded-xl shadow-lg">
-                <h3 className="text-xl font-bold text-indigo-900 mb-4">Seleccionar Período</h3>
+        <div className="space-y-6">
+            <header className="text-center p-6 bg-white rounded-xl shadow-md">
+                <h1 className="text-2xl md:text-3xl font-bold text-blue-800">MINISTERIO DE ADMINISTRACIÓN FINANCIERA</h1>
+                <p className="text-lg md:text-xl text-gray-600">Información Financiera Mensual - Jurisdicción Nicaragua, C.A.</p>
+            </header>
+
+            <Accordion title="Informes Guardados">
+                <div className="space-y-3 max-h-60 overflow-y-auto p-1">
+                    {sortedReports.length > 0 ? (
+                        sortedReports.map(report => (
+                            <div key={report.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 rounded-lg border">
+                                <div>
+                                    <p className="font-semibold text-primary">{MONTH_NAMES[report.month - 1]} {report.year}</p>
+                                    <p className="text-xs text-gray-500">ID: {report.id}</p>
+                                </div>
+                                <div className="flex items-center space-x-2 mt-2 sm:mt-0">
+                                    <button onClick={() => handleLoadReport(report)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors">
+                                        <ArrowUpOnSquareIcon className="w-4 h-4" />
+                                        Cargar
+                                    </button>
+                                    <button onClick={() => handleDeleteReport(report.id)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-danger rounded-md hover:bg-red-600 transition-colors">
+                                        <TrashIcon className="w-4 h-4" />
+                                        Eliminar
+                                    </button>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-center text-gray-500 py-2">No hay informes guardados.</p>
+                    )}
+                </div>
+            </Accordion>
+
+             <div className="p-6 bg-white rounded-xl shadow-lg space-y-4">
+                <h3 className="text-xl font-bold text-primary">Cargar Datos del Sistema</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
                     <div>
                         <label htmlFor="reportMonth" className="block text-sm font-medium text-gray-700">Mes</label>
                         <select id="reportMonth" value={selectedMonth} onChange={e => setSelectedMonth(parseInt(e.target.value))} className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
-                        {MONTH_NAMES.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}
+                            {MONTH_NAMES.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}
                         </select>
                     </div>
                     <div>
                         <label htmlFor="reportYear" className="block text-sm font-medium text-gray-700">Año</label>
                         <input type="number" id="reportYear" value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))} className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" />
                     </div>
-                    <button onClick={handlePrefill} className="flex items-center justify-center gap-2 w-full px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors">
-                        <CalculatorIcon className="w-5 h-5" />
-                        <span>Calcular y Rellenar</span>
+                    <button onClick={handleLoadData} className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                        Cargar Datos del Mes
                     </button>
                 </div>
+                 <p className="text-xs text-gray-500 mt-2">Nota: Esto llenará automáticamente los campos del informe con los datos de las semanas registradas para el mes seleccionado. Los campos como "Primicias" o "Colectas Especiales" deben llenarse manually.</p>
             </div>
 
-            {/* FORMULARIO COMPLETO */}
-            <div className="p-6 bg-white rounded-xl shadow-lg space-y-4">
-                <h3 className="text-xl font-bold text-indigo-900">1. Información General</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <FormField label="Clave Iglesia" name="clave-iglesia" value={formData['clave-iglesia']} onChange={handleFormChange} readOnly/>
-                    <FormField label="Nombre Iglesia" name="nombre-iglesia" value={formData['nombre-iglesia']} onChange={handleFormChange} readOnly/>
-                    <FormField label="Distrito" name="distrito" value={formData['distrito']} onChange={handleFormChange} />
-                    <FormField label="Departamento" name="departamento" value={formData['departamento']} onChange={handleFormChange} />
-                    <FormField label="Miembros Activos" name="miembros-activos" value={formData['miembros-activos']} onChange={handleFormChange} type="number" readOnly />
-                    <FormField label="Mes del Reporte" name="mes-reporte" value={formData['mes-reporte']} onChange={handleFormChange} readOnly />
-                    <FormField label="Año del Reporte" name="ano-reporte" value={formData['ano-reporte']} onChange={handleFormChange} readOnly />
-                    <FormField label="Nombre Ministro" name="nombre-ministro" value={formData['nombre-ministro']} onChange={handleFormChange} />
-                    <FormField label="Grado Ministro" name="grado-ministro" value={formData['grado-ministro']} onChange={handleFormChange} />
-                    <FormField label="Tel. Ministro" name="tel-ministro" value={formData['tel-ministro']} onChange={handleFormChange} />
-                </div>
-            </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="p-6 bg-white rounded-xl shadow-lg space-y-4">
-                    <h3 className="text-xl font-bold text-green-700">2. Entradas (C$)</h3>
-                    <FormField label="Saldo Inicial del Mes" name="saldo-anterior" value={formData['saldo-anterior']} onChange={handleFormChange} type="number" />
-                    <FormField label="Diezmos" name="ing-diezmos" value={formData['ing-diezmos']} onChange={handleFormChange} type="number" readOnly/>
-                    <FormField label="Ofrendas Ordinarias" name="ing-ofrendas-ordinarias" value={formData['ing-ofrendas-ordinarias']} onChange={handleFormChange} type="number" readOnly />
-                    <FormField label="Primicias" name="ing-primicias" value={formData['ing-primicias']} onChange={handleFormChange} type="number" readOnly />
-                    <FormField label="Ayuda al Encargado" name="ing-ayuda-encargado" value={formData['ing-ayuda-encargado']} onChange={handleFormChange} type="number" />
-                    <FormField label="Ceremonial" name="ing-ceremonial" value={formData['ing-ceremonial']} onChange={handleFormChange} type="number" readOnly />
-                    {/* ... other income fields ... */}
-                </div>
-                <div className="p-6 bg-white rounded-xl shadow-lg space-y-4">
-                    <h3 className="text-xl font-bold text-red-700">3. Salidas (C$)</h3>
-                    <FormField label="Asignación Autorizada" name="egr-asignacion" value={formData['egr-asignacion']} onChange={handleFormChange} type="number" />
-                    <FormField label="Gomer del Mes" name="egr-gomer" value={formData['egr-gomer']} onChange={handleFormChange} type="number" readOnly />
-                    <FormField label="Ceremonial" name="egr-ceremonial" value={formData['egr-ceremonial']} onChange={handleFormChange} type="number" readOnly />
-                    <FormField label="Traspaso para Construcción Local" name="egr-traspaso-construccion" value={formData['egr-traspaso-construccion']} onChange={handleFormChange} type="number" />
-                    {/* ... other expense fields ... */}
-                </div>
-            </div>
-
-             {/* === REAL-TIME SUMMARY SECTION === */}
-            <div className="p-6 bg-white rounded-xl shadow-lg space-y-4">
-                <h3 className="text-xl font-bold text-indigo-900">Resumen y Cierre (Cálculos en Tiempo Real)</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2 p-4 bg-gray-50 rounded-lg">
-                        <div className="flex justify-between font-semibold"><span className="text-gray-600">Saldo Inicial del Mes:</span> <span>{formatCurrency(formData['saldo-anterior'])}</span></div>
-                        <div className="flex justify-between"><span className="text-gray-600">Total Ingresos del Mes:</span> <span>{formatCurrency(summaryCalculations.totalIngresos)}</span></div>
-                        <div className="flex justify-between font-bold text-lg border-t pt-2"><span className="text-indigo-800">Total Disponible del Mes:</span> <span className="text-indigo-800">{formatCurrency(summaryCalculations.totalDisponible)}</span></div>
-                        <div className="flex justify-between"><span className="text-gray-600">Total Salidas del Mes:</span> <span>({formatCurrency(summaryCalculations.totalSalidas)})</span></div>
-                        <div className="flex justify-between font-bold text-lg border-t pt-2 bg-blue-100 p-2 rounded-md"><span className="text-blue-800">Utilidad o Remanente:</span> <span className="text-blue-800">{formatCurrency(summaryCalculations.utilidadRemanente)}</span></div>
+            <form id="financial-form" className="space-y-4">
+                <Accordion title="1. Información General del Reporte" initialOpen>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Field id="clave-iglesia" label="Clave Iglesia" isCurrency={false} />
+                        <Field id="mes-reporte" label="Mes del Reporte" isCurrency={false} />
+                        <Field id="nombre-iglesia" label="Nombre Iglesia Local" isCurrency={false} />
+                        <Field id="ano-reporte" label="Año del Reporte" isCurrency={false} />
+                        <Field id="distrito" label="Distrito" isCurrency={false} />
+                        <Field id="nombre-ministro" label="Nombre del Ministro" isCurrency={false} />
+                        <Field id="departamento" label="Departamento" isCurrency={false} />
+                        <Field id="grado-ministro" label="Grado del Ministro" isCurrency={false} />
+                        <Field id="miembros-activos" label="Miembros Activos" />
+                        <Field id="tel-ministro" label="Teléfono / Celular" isCurrency={false} />
                     </div>
-                    <div className="space-y-2 p-4 bg-gray-50 rounded-lg">
-                        <h4 className="font-bold text-indigo-900 mb-2">Distribución del Saldo Remanente</h4>
-                         <FormField label="Dirección General (Diezmos de Diezmos)" name="dist-direccion" value={formData['dist-direccion']} onChange={handleFormChange} type="number" />
-                         <FormField label="Tesorería (Cuenta de Remanentes)" name="dist-tesoreria" value={formData['dist-tesoreria']} onChange={handleFormChange} type="number" readOnly />
-                         <FormField label="Pro-Construcción" name="dist-pro-construccion" value={formData['dist-pro-construccion']} onChange={handleFormChange} type="number" />
-                         <FormField label="Otros" name="dist-otros" value={formData['dist-otros']} onChange={handleFormChange} type="number" />
+                </Accordion>
+
+                <Accordion title="2. Entradas (Ingresos)">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                        <div className="md:col-span-2"><Field id="saldo-anterior" label="Saldo del Mes Anterior" /></div>
+                        
+                        <Subheading title="Ingresos por Ofrendas" />
+                        <Field id="ing-diezmos" label="Diezmos" />
+                        <Field id="ing-ofrendas-ordinarias" label="Ofrendas Ordinarias" />
+                        <Field id="ing-primicias" label="Primicias" />
+                        <Field id="ing-ayuda-encargado" label="Ayuda al Encargado" />
+
+                        <Subheading title="Ingresos por Colectas Especiales" />
+                        <Field id="ing-ceremonial" label="Ceremonial" />
+                        <Field id="ing-ofrenda-especial-sdd" label="Ofrenda Especial SdD NJG" />
+                        <Field id="ing-evangelizacion" label="Evangelización Mundial" />
+                        <Field id="ing-santa-cena" label="Colecta de Santa Cena" />
+                        
+                        <Subheading title="Ingresos por Colectas Locales" />
+                        <Field id="ing-servicios-publicos" label="Pago de Servicios Públicos" />
+                        <Field id="ing-arreglos-locales" label="Arreglos Locales" />
+                        <Field id="ing-mantenimiento" label="Mantenimiento y Conservación" />
+                        <Field id="ing-construccion-local" label="Construcción Local" />
+                        <Field id="ing-muebles" label="Muebles y Artículos" />
+                        <Field id="ing-viajes-ministro" label="Viajes y viáticos para Ministro" />
+                        <Field id="ing-reuniones-ministeriales" label="Reuniones Ministeriales" />
+                        <Field id="ing-atencion-ministros" label="Atención a Ministros" />
+                        <Field id="ing-viajes-extranjero" label="Viajes fuera del País" />
+                        <Field id="ing-actividades-locales" label="Actividades Locales" />
+                        <Field id="ing-ciudad-lldm" label="Ofrendas para Ciudad LLDM" />
+                        <Field id="ing-adquisicion-terreno" label="Adquisición Terreno/Edificio" />
+                    </div>
+                </Accordion>
+
+                 <Accordion title="3. Salidas (Egresos)">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                        <Subheading title="Manutención del Ministro" />
+                        <Field id="egr-asignacion" label="Asignación Autorizada" />
+                        <Field id="egr-gomer" label="Gomer del Mes" />
+
+                        <Subheading title="Egresos por Colectas Especiales" />
+                        <Field id="egr-ceremonial" label="Ceremonial" />
+                        <Field id="egr-ofrenda-especial-sdd" label="Ofrenda Especial SdD NJG" />
+                        <Field id="egr-evangelizacion" label="Evangelización Mundial" />
+                        <Field id="egr-santa-cena" label="Colecta de Santa Cena" />
+
+                        <Subheading title="Egresos por Colectas Locales" />
+                        <Field id="egr-servicios-publicos" label="Pago de Servicios Públicos" />
+                        <Field id="egr-arreglos-locales" label="Arreglos Locales" />
+                        <Field id="egr-mantenimiento" label="Mantenimiento y Conservación" />
+                        <Field id="egr-traspaso-construccion" label="Traspaso para Construcción" />
+                        <Field id="egr-muebles" label="Muebles y Artículos" />
+                        <Field id="egr-viajes-ministro" label="Viajes y viáticos para Ministro" />
+                        <Field id="egr-reuniones-ministeriales" label="Reuniones Ministeriales" />
+                        <Field id="egr-atencion-ministros" label="Atención a Ministros" />
+                        <Field id="egr-viajes-extranjero" label="Viajes fuera del País" />
+                        <Field id="egr-actividades-locales" label="Actividades Locales" />
+                        <Field id="egr-ciudad-lldm" label="Ofrendas para Ciudad LLDM" />
+                        <Field id="egr-adquisicion-terreno" label="Adquisición Terreno/Edificio" />
+                    </div>
+                </Accordion>
+
+                <Accordion title="4. Resumen y Firmas">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                        <Subheading title="Distribución del Remanente" />
+                        <Field id="dist-direccion" label="Dirección General (Diezmos de Diezmos)" />
+                        <Field id="dist-tesoreria" label="Tesorería (Cuenta de Remanentes)" />
+                        <Field id="dist-pro-construccion" label="Pro-Construcción" />
+                        <Field id="dist-otros" label="Otros" />
+
+                        <Subheading title="Nombres para Firmas de Comisión" />
+                        <Field id="comision-nombre-1" label="Nombre Firma 1" isCurrency={false} />
+                        <Field id="comision-nombre-2" label="Nombre Firma 2" isCurrency={false} />
+                        <Field id="comision-nombre-3" label="Nombre Firma 3" isCurrency={false} />
+                    </div>
+                </Accordion>
+            </form>
+
+            <Accordion title="5. Resumen de Totales" initialOpen>
+                <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                    <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Cálculos en Tiempo Real</h3>
+                    <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Saldo del Mes Anterior:</span>
+                        <span className="font-bold text-lg text-gray-800">{formatCurrency(calculations.saldoAnterior)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-green-700">
+                        <span className="font-semibold">Total Ingresos del Mes:</span>
+                        <span className="font-bold text-lg">{formatCurrency(calculations.totalIngresos)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-blue-800 font-bold border-t pt-2">
+                        <span>Total Disponible (Saldo + Ingresos):</span>
+                        <span className="text-xl">{formatCurrency(calculations.totalDisponible)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-red-600">
+                        <span className="font-semibold">Total Salidas del Mes:</span>
+                        <span className="font-bold text-lg">{formatCurrency(calculations.totalSalidas)}</span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 mt-2 bg-indigo-100 rounded-md">
+                        <span className="font-bold text-indigo-900 text-lg">Remanente Final:</span>
+                        <span className="font-extrabold text-indigo-900 text-2xl">{formatCurrency(calculations.remanente)}</span>
                     </div>
                 </div>
-            </div>
-            {/* ... other form sections ... */}
+            </Accordion>
 
-
-            <div className="flex flex-col sm:flex-row gap-4">
-                <button onClick={handleSaveReport} className="flex-1 px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors">
-                    Guardar Reporte Localmente
-                </button>
-                <button onClick={handleExportAndUpload} disabled={isProcessing || !drive.isAuthenticated} className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-indigo-900 text-white font-semibold rounded-lg hover:bg-indigo-800 disabled:bg-gray-400 transition-colors">
-                    <ArrowDownTrayIcon className="w-5 h-5" />
-                    <span>{isProcessing ? 'Procesando...' : 'Exportar PDF y Subir a Drive'}</span>
-                </button>
-            </div>
-
-            <div className="p-6 bg-white rounded-xl shadow-lg">
-                <h3 className="text-xl font-bold text-indigo-900 mb-4">Informes Guardados</h3>
-                <ul className="space-y-2">
-                    {savedReports.length > 0 ? savedReports.map(report => (
-                        <li key={report.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                            <span className="font-medium">{MONTH_NAMES[report.month - 1]} {report.year}</span>
-                            <div className="flex items-center gap-2">
-                                <button onClick={() => { setSelectedMonth(report.month); setSelectedYear(report.year); }} className="px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded-md hover:bg-blue-200">Cargar</button>
-                                <button onClick={() => handleDeleteReport(report.id)} className="text-red-500 hover:text-red-700 p-1.5 rounded-full hover:bg-red-100">
-                                    <TrashIcon className="w-5 h-5" />
-                                </button>
-                            </div>
-                        </li>
-                    )) : <p className="text-gray-500 text-center">No hay informes guardados.</p>}
-                </ul>
+             <div className="p-6 bg-white rounded-xl shadow-lg mt-6 space-y-4">
+                <h3 className="text-xl font-bold text-primary">Acciones del Informe</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <button onClick={handleSaveReport} className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors">
+                        <ArchiveBoxArrowDownIcon className="w-5 h-5" />
+                        Guardar Borrador
+                    </button>
+                    <button onClick={handleClearForm} className="w-full flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-lg transition-colors">
+                        <TrashIcon className="w-5 h-5" />
+                        Limpiar Formulario
+                    </button>
+                    <button 
+                        onClick={generateAndSavePdf} 
+                        disabled={isGenerating || !drive.isAuthenticated}
+                        title={!drive.isAuthenticated ? "Cargue las credenciales en Admin para habilitar" : "Generar y guardar PDF en Drive"}
+                        className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed sm:col-span-2 lg:col-span-1"
+                    >
+                        <DocumentArrowDownIcon className="w-5 h-5" />
+                        {isGenerating ? 'Generando...' : 'Generar Reporte en PDF'}
+                    </button>
+                </div>
             </div>
         </div>
     );
