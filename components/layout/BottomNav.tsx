@@ -25,12 +25,12 @@ const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab }) => {
             key={item.id}
             onClick={() => setActiveTab(item.id as Tab)}
             className={`flex flex-col items-center justify-center w-full pt-2 pb-1 text-xs transition-colors duration-200 ${
-              activeTab === item.id ? 'text-secondary' : 'text-gray-500 hover:text-secondary'
+              activeTab === item.id ? 'text-blue-600' : 'text-gray-500 hover:text-blue-600'
             }`}
           >
             <item.icon className="w-6 h-6 mb-1" />
             <span>{item.label}</span>
-            {activeTab === item.id && <div className="w-8 h-1 mt-1 rounded-full bg-secondary"></div>}
+            {activeTab === item.id && <div className="w-8 h-1 mt-1 rounded-full bg-blue-600"></div>}
           </button>
         ))}
       </div>

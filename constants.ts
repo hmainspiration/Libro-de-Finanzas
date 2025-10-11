@@ -1,34 +1,48 @@
-import { Member, Formulas, MonthlyReportFormState } from './types';
+import { Member, Formulas, MonthlyReportFormState, ChurchInfo } from './types';
 
-// --- ACTION REQUIRED ---
-// Paste your Google OAuth 2.0 Client ID here. This is required for the
-// administrator to connect their Google account and enable Drive integration.
-export const GOOGLE_CLIENT_ID = '641321851743-oelc0tqe0u2fanhun1m5vbjgkgr8r6vl.apps.googleusercontent.com'; // e.g., '1234567890-abcde.apps.googleusercontent.com'
-
-
+// Lista de miembros actualizada según la solicitud del usuario.
 export const INITIAL_MEMBERS: Member[] = [
-  { id: 'm-1', name: 'Juan Perez' },
-  { id: 'm-2', name: 'Maria Rodriguez' },
-  { id: 'm-3', name: 'Carlos Gomez' },
-  { id: 'm-4', name: 'Ana Martinez' },
-  { id: 'm-5', name: 'Luis Garcia' },
+  { id: 'm-1', name: 'Elmer Ocampo' },
+  { id: 'm-2', name: 'Rubén Ocampo' },
+  { id: 'm-3', name: 'Santos Pichardo' },
+  { id: 'm-4', name: 'Adilia Martínez' },
+  { id: 'm-5', name: 'Salía Ocampo' },
+  { id: 'm-6', name: 'Janny Morales' },
+  { id: 'm-7', name: 'Hilda Morales Ocampo' },
+  { id: 'm-8', name: 'Reina Matamoros' },
+  { id: 'm-9', name: 'Anny Blanchard Ocampo' },
+  { id: 'm-10', name: 'Marta García' },
+  { id: 'm-11', name: 'Victorina Matamoros' },
+  { id: 'm-12', name: 'María Campo' },
+  { id: 'm-13', name: 'Neli Ocampo (Apartada)' },
+  { id: 'm-14', name: 'Damaris Ortiz (Esposa de ministro)' },
+  { id: 'm-15', name: 'Katerin Blanchard Ocampo (Apartada)' },
+  { id: 'm-16', name: 'Miurel Blanchard Ocampo (Apartada)' },
+  { id: 'm-17', name: 'Fernando Pichardo Ocampo' },
+  { id: 'm-18', name: 'Nain Alvarez' },
+  { id: 'm-19', name: 'Libni Alvarez' },
 ];
 
 export const INITIAL_CATEGORIES: string[] = [
   'Diezmo',
   'Ordinaria',
+  'Primicias',
   'Luz',
   'Agua',
-  'Construccion',
-  'Especial',
-  'Primicias',
-  'Ayuda al Encargado',
   'Ceremonial',
 ];
 
 export const DEFAULT_FORMULAS: Formulas = {
   diezmoPercentage: 10,
-  remanenteThreshold: 5000,
+  remanenteThreshold: 4500, // Ajustado de 5000 a 4500
+};
+
+export const DEFAULT_CHURCH_INFO: ChurchInfo = {
+  defaultMinister: '',
+  ministerGrade: '',
+  district: '',
+  department: '',
+  ministerPhone: '',
 };
 
 export const MONTH_NAMES = [
@@ -99,7 +113,6 @@ export const initialMonthlyReportFormState: MonthlyReportFormState = {
     'comision-nombre-3': '',
 };
 
-// These folder IDs are for the administrator's personal Drive account.
-// The app will gain access to them after the admin logs in.
-export const DRIVE_WEEKLY_REPORTS_FOLDER_ID = '1KZ1NWR8dH1LmpAOgmU-lhUda9aTwa3PW';
-export const DRIVE_MONTHLY_REPORTS_FOLDER_ID = '1MTDHnogp-IAAVHazdjgGu4V5-SDJ31hp';
+// Las credenciales de Google Drive y los IDs de carpetas se han movido a variables de entorno
+// para mayor seguridad y para permitir el despliegue en plataformas como Vercel.
+// Se configuran directamente en el panel de administración del servicio de hosting.

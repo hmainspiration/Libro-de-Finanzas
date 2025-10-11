@@ -16,6 +16,15 @@ export interface Formulas {
   remanenteThreshold: number;
 }
 
+// New type for default church information
+export interface ChurchInfo {
+  defaultMinister: string;
+  ministerGrade: string;
+  district: string;
+  department: string;
+  ministerPhone: string;
+}
+
 export interface WeeklyRecord {
   id: string;
   day: number;

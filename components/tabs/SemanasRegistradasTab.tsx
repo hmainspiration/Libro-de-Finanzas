@@ -44,7 +44,7 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({ members, onSelect
         value={inputValue}
         onChange={handleChange}
         placeholder="Escriba el nombre del miembro..."
-        className="w-full p-3 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-secondary focus:border-transparent"
+        className="w-full p-3 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-600 focus:border-transparent"
       />
       {suggestions.length > 0 && (
         <ul className="absolute z-20 w-full mt-1 overflow-y-auto bg-white border border-gray-300 rounded-lg shadow-lg max-h-60">
@@ -164,210 +164,174 @@ const SemanasRegistradasTab: React.FC<SemanasRegistradasTabProps> = ({ records, 
     const donationsData = record.donations.map(d => ({ Miembro: d.memberName, Categoría: d.category, Monto: d.amount, }));
 
     const wb = (window as any).XLSX.utils.book_new();
+    // FIX: Corrected typo 'a' to 'any' and completed the function logic.
     const wsSummary = (window as any).XLSX.utils.aoa_to_sheet(summaryData);
     (window as any).XLSX.utils.book_append_sheet(wb, wsSummary, "Resumen");
+    
     const wsDonations = (window as any).XLSX.utils.json_to_sheet(donationsData);
     (window as any).XLSX.utils.book_append_sheet(wb, wsDonations, "Detalle de Ofrendas");
 
-    const fileName = `Semana-NIMT02-${record.day}-${record.month}-${record.year}.xlsx`;
-    
-    (window as any).XLSX.writeFile(wb, fileName);
+    const fileName = `Semana-${record.day}-${record.month}-${record.year}.xlsx`;
+    const excelBuffer = (window as any).XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
     if (drive.isAuthenticated) {
         try {
-            const excelBlob = new Blob([
-                (window as any).XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-            ], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-
-            await drive.uploadWeeklyReport(fileName, excelBlob);
+            setIsSyncing(true);
+            await drive.uploadWeeklyReport(fileName, blob);
             alert(`Reporte semanal guardado exitosamente en Google Drive: ${fileName}`);
-        } catch (error) {
-            console.error("Error uploading to Google Drive:", error);
-            alert(`Error al guardar en Google Drive: ${error instanceof Error ? error.message : String(error)}`);
+        } catch(err) {
+            alert(`Error al subir a Drive: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+            setIsSyncing(false);
         }
     } else {
         alert("El guardado en Google Drive está deshabilitado. Por favor, cargue las credenciales en el Panel de Administración.");
     }
   };
 
-  const handleSyncFromDrive = async () => {
-    if (!drive.isAuthenticated) {
-        alert("Por favor, cargue las credenciales en el Panel de Administración para habilitar la sincronización.");
-        return;
-    }
-    if (!window.confirm("¿Sincronizar con Google Drive? Esto reemplazará todos los datos locales de semanas registradas con los archivos encontrados en Drive. Se recomienda guardar cualquier cambio local primero.")) {
-        return;
-    }
-    setIsSyncing(true);
-    try {
-        const weeklyRecordsFromDrive = await drive.loadAndParseWeeklyReports();
-        setRecords(weeklyRecordsFromDrive);
-        alert(`Sincronización completa. Se cargaron ${weeklyRecordsFromDrive.length} registros desde Google Drive.`);
-    } catch (error) {
-        console.error("Sync failed:", error);
-        alert(`Falló la sincronización con Google Drive: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-        setIsSyncing(false);
-    }
-  };
-
-  const selectedMemberName = useMemo(() => selectedMember?.name || '', [selectedMember]);
-
-  const sortedRecords = [...records].sort((a, b) => {
-    const dateA = new Date(a.year, a.month - 1, a.day);
-    const dateB = new Date(b.year, b.month - 1, b.day);
-    return dateB.getTime() - dateA.getTime();
-  });
-
+  // FIX: Added return statement with JSX to render the component UI.
   return (
-    <div className="space-y-4">
-       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <h2 className="text-2xl font-bold text-primary">Semanas Registradas</h2>
-            <button 
-                onClick={handleSyncFromDrive} 
-                className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2 font-semibold text-white transition duration-300 rounded-lg bg-secondary hover:bg-blue-600 disabled:bg-gray-400"
-                disabled={!drive.isAuthenticated || isSyncing}
-                title={!drive.isAuthenticated ? "Cargue las credenciales en Admin para habilitar" : "Sincronizar con Google Drive"}
+    <div className="space-y-6">
+        <div className="p-6 bg-white rounded-xl shadow-lg flex justify-between items-center">
+            <h2 className="text-2xl font-bold text-indigo-900">Semanas Registradas</h2>
+            <button
+                onClick={async () => {
+                    if (!drive.isAuthenticated) {
+                        alert("Conecte con Google Drive en el panel de Admin primero.");
+                        return;
+                    }
+                    if (!window.confirm("Esto reemplazará los registros locales con los de Google Drive. ¿Continuar?")) return;
+                    setIsSyncing(true);
+                    try {
+                        const driveRecords = await drive.loadAndParseWeeklyReports();
+                        const localIds = new Set(records.map(r => r.id));
+                        const newRecords = driveRecords.filter(dr => !localIds.has(dr.id));
+                        setRecords(prev => [...prev, ...newRecords].sort((a,b) => new Date(b.year, b.month-1, b.day).getTime() - new Date(a.year, a.month-1, a.day).getTime()));
+                        alert(`${newRecords.length} nuevos registros cargados desde Google Drive.`);
+                    } catch (e) {
+                        alert(`Error al sincronizar: ${e instanceof Error ? e.message : String(e)}`);
+                    } finally {
+                        setIsSyncing(false);
+                    }
+                }}
+                disabled={isSyncing || !drive.isAuthenticated}
+                className="flex items-center gap-2 px-4 py-2 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
             >
-                {isSyncing ? (
-                    <>
-                        <span className="animate-spin h-5 w-5 mr-3">
-                            <ArrowPathIcon className="w-5 h-5"/>
-                        </span>
-                        Sincronizando...
-                    </>
-                ) : (
-                    <>
-                        <ArrowPathIcon className="w-5 h-5"/>
-                        Sincronizar con Drive
-                    </>
-                )}
+                {isSyncing ? <ArrowPathIcon className="w-5 h-5 animate-spin" /> : <ArrowDownTrayIcon className="w-5 h-5" />}
+                <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar con Drive'}</span>
             </button>
         </div>
-       
-      {records.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64 p-6 text-center bg-white rounded-xl shadow-lg">
-            <h3 className="text-xl font-semibold text-gray-700">No hay semanas registradas</h3>
-            <p className="mt-2 text-gray-500">Los resúmenes de las semanas que guarde aparecerán aquí. Pruebe a sincronizar con Google Drive para cargar registros existentes.</p>
+
+        <div className="space-y-4">
+            {records.length > 0 ? (
+                records
+                    .sort((a, b) => new Date(b.year, b.month - 1, b.day).getTime() - new Date(a.year, a.month - 1, a.day).getTime())
+                    .map(record => (
+                        <div key={record.id} className="p-4 bg-white rounded-xl shadow-md flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                            <div>
+                                <p className="font-bold text-lg text-indigo-900">{`Semana del ${record.day} de ${MONTH_NAMES[record.month - 1]} de ${record.year}`}</p>
+                                <p className="text-sm text-gray-500">Ministro: {record.minister}</p>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <button onClick={() => handleOpenEditModal(record)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-yellow-500 rounded-md hover:bg-yellow-600">
+                                    <PencilIcon className="w-4 h-4" /> Editar
+                                </button>
+                                <button onClick={() => handleDelete(record.id)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700">
+                                    <TrashIcon className="w-4 h-4" /> Eliminar
+                                </button>
+                                <button onClick={() => handleExportAndSave(record)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
+                                    <ArrowDownTrayIcon className="w-4 h-4" /> Exportar/Subir
+                                </button>
+                            </div>
+                        </div>
+                    ))
+            ) : (
+                <div className="p-6 text-center bg-white rounded-xl shadow-lg">
+                    <p>No hay semanas registradas. Comience en la pestaña 'Registro'.</p>
+                </div>
+            )}
         </div>
-        ) : (
-            sortedRecords.map(record => {
-            const total = record.donations
-                .filter(d => d.category === 'Diezmo' || d.category === 'Ordinaria')
-                .reduce((sum, d) => sum + d.amount, 0);
 
-            return (
-                <div key={record.id} className="p-4 bg-white rounded-xl shadow-lg flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex-grow">
-                        <p className="font-bold text-lg text-primary">{record.day}/{record.month}/{record.year}</p>
-                        <p className="text-sm text-gray-600">Ministro: {record.minister}</p>
-                        <p className="text-sm text-gray-600 mt-1">Total (Diezmo + Ord.): <span className="font-semibold">C$ {total.toFixed(2)}</span></p>
+        {editingRecord && tempRecord && (
+            <div className="fixed inset-0 z-40 bg-black bg-opacity-50 flex justify-center items-start overflow-y-auto p-4">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-8 relative">
+                    <div className="sticky top-0 bg-white p-6 border-b rounded-t-2xl z-10">
+                         <h3 className="text-2xl font-bold text-indigo-900">Editando Semana</h3>
+                         <p className="text-gray-500">{`${tempRecord.day} de ${MONTH_NAMES[tempRecord.month - 1]} de ${tempRecord.year}`}</p>
+                        <button onClick={handleCloseModal} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800">
+                            <XMarkIcon className="w-8 h-8"/>
+                        </button>
                     </div>
-                    <div className="flex items-center space-x-2 mt-4 sm:mt-0">
-                        <button onClick={() => handleExportAndSave(record)} className="p-2 text-white bg-success rounded-full hover:bg-green-600 transition disabled:bg-gray-400" title="Exportar y Guardar en Drive" disabled={!drive.isAuthenticated}>
-                            <ArrowDownTrayIcon className="w-5 h-5"/>
-                        </button>
-                        <button onClick={() => handleOpenEditModal(record)} className="p-2 text-white bg-secondary rounded-full hover:bg-blue-600 transition" title="Editar">
-                            <PencilIcon className="w-5 h-5"/>
-                        </button>
-                        <button onClick={() => handleDelete(record.id)} className="p-2 text-white bg-danger rounded-full hover:bg-red-600 transition" title="Eliminar">
-                            <TrashIcon className="w-5 h-5"/>
-                        </button>
+                    
+                    <div className="p-6 space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Día</label>
+                                <input type="number" name="day" value={tempRecord.day} onChange={handleModalInputChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md"/>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Mes</label>
+                                <select name="month" value={tempRecord.month} onChange={handleModalInputChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                                    {MONTH_NAMES.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Año</label>
+                                <input type="number" name="year" value={tempRecord.year} onChange={handleModalInputChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md"/>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Ministro</label>
+                                <input type="text" name="minister" value={tempRecord.minister} onChange={handleModalInputChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md"/>
+                            </div>
+                        </div>
+
+                        <div className="p-4 border-t space-y-4">
+                            <h4 className="text-lg font-semibold text-indigo-900">Agregar Nueva Donación</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                                <div className="md:col-span-3">
+                                    <label className="block text-sm font-medium text-gray-700">Miembro</label>
+                                    <AutocompleteInput members={members} onSelect={setSelectedMember} selectedMemberName={selectedMember?.name || ''} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Categoría</label>
+                                    <select value={category} onChange={e => setCategory(e.target.value)} className="mt-1 w-full p-3 border border-gray-300 rounded-lg">
+                                        {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Cantidad</label>
+                                    <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="mt-1 w-full p-3 border border-gray-300 rounded-lg" />
+                                </div>
+                                <button onClick={handleAddDonation} className="flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                                    <PlusIcon className="w-5 h-5"/> Agregar
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="max-h-60 overflow-y-auto space-y-2 p-2 bg-gray-50 rounded-lg">
+                             <h4 className="text-lg font-semibold text-indigo-900 mb-2 px-2">Donaciones Registradas</h4>
+                            {tempRecord.donations.length > 0 ? tempRecord.donations.map(donation => (
+                                <div key={donation.id} className="flex justify-between items-center bg-white p-2 rounded-md shadow-sm">
+                                    <div>
+                                        <p className="font-medium">{donation.memberName}</p>
+                                        <p className="text-sm text-gray-500">{donation.category} - C$ {donation.amount.toFixed(2)}</p>
+                                    </div>
+                                    <button onClick={() => handleRemoveDonation(donation.id)} className="text-red-500 hover:text-red-700">
+                                        <TrashIcon className="w-5 h-5"/>
+                                    </button>
+                                </div>
+                            )) : <p className="text-center text-gray-500 py-4">No hay donaciones en este registro.</p>}
+                        </div>
+
+                    </div>
+                    <div className="sticky bottom-0 bg-gray-50 p-4 border-t rounded-b-2xl flex justify-end gap-3">
+                        <button onClick={handleCloseModal} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">Cancelar</button>
+                        <button onClick={handleSaveChanges} className="px-6 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">Guardar Cambios</button>
                     </div>
                 </div>
-            );
-            })
-        )
-      }
-
-      {editingRecord && tempRecord && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4" role="dialog" aria-modal="true">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center p-4 border-b">
-              <h3 className="text-xl font-bold text-primary">Editar Semana Registrada</h3>
-              <button onClick={handleCloseModal} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
-                <XMarkIcon className="w-6 h-6 text-gray-700" />
-              </button>
             </div>
-            
-            <div className="p-6 space-y-6 overflow-y-auto">
-              <div className="p-4 bg-gray-50 rounded-lg border">
-                <h4 className="font-semibold text-lg text-primary mb-3">Información General</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                      <label htmlFor="day" className="block text-sm font-medium text-gray-700">Día</label>
-                      <input type="number" name="day" id="day" value={tempRecord.day} onChange={handleModalInputChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md"/>
-                  </div>
-                  <div>
-                      <label htmlFor="month" className="block text-sm font-medium text-gray-700">Mes</label>
-                      <select name="month" id="month" value={tempRecord.month} onChange={handleModalInputChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md">
-                          {MONTH_NAMES.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}
-                      </select>
-                  </div>
-                  <div>
-                      <label htmlFor="year" className="block text-sm font-medium text-gray-700">Año</label>
-                      <input type="number" name="year" id="year" value={tempRecord.year} onChange={handleModalInputChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md"/>
-                  </div>
-                  <div className="md:col-span-3">
-                      <label htmlFor="minister" className="block text-sm font-medium text-gray-700">Ministro</label>
-                      <input type="text" name="minister" id="minister" value={tempRecord.minister} onChange={handleModalInputChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md"/>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 bg-gray-50 rounded-lg border">
-                 <h4 className="font-semibold text-lg text-primary mb-3">Agregar Ofrenda</h4>
-                 <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Miembro</label>
-                        <AutocompleteInput members={members} onSelect={setSelectedMember} selectedMemberName={selectedMemberName} />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label htmlFor="amountModal" className="block text-sm font-medium text-gray-700">Cantidad (C$)</label>
-                            <input type="number" id="amountModal" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="mt-1 w-full p-3 bg-white border border-gray-300 rounded-lg shadow-sm" />
-                        </div>
-                        <div>
-                            <label htmlFor="categoryModal" className="block text-sm font-medium text-gray-700">Categoría</label>
-                            <select id="categoryModal" value={category} onChange={e => setCategory(e.target.value)} className="mt-1 w-full p-3 bg-white border border-gray-300 rounded-lg shadow-sm">
-                                {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                            </select>
-                        </div>
-                    </div>
-                    <button onClick={handleAddDonation} className="w-full py-3 font-semibold text-white transition duration-300 rounded-lg bg-primary hover:bg-gray-700 flex items-center justify-center">
-                        <PlusIcon className="w-5 h-5 mr-2" />
-                        Agregar a la Semana
-                    </button>
-                 </div>
-              </div>
-              
-              <div>
-                <h4 className="font-semibold text-lg text-primary mb-3">Ofrendas de la Semana</h4>
-                <div className="space-y-2 max-h-60 overflow-y-auto p-2 bg-gray-50 rounded-lg border">
-                  {tempRecord.donations.length > 0 ? tempRecord.donations.map(donation => (
-                    <div key={donation.id} className="flex items-center justify-between p-2 bg-white rounded-md shadow-sm">
-                        <div>
-                            <p className="font-medium">{donation.memberName}</p>
-                            <p className="text-sm text-gray-600">{donation.category} - <span className="font-semibold">C$ {donation.amount.toFixed(2)}</span></p>
-                        </div>
-                        <button onClick={() => handleRemoveDonation(donation.id)} className="p-2 text-red-500 hover:text-red-700 rounded-full hover:bg-red-50 transition-colors">
-                            <TrashIcon className="w-5 h-5" />
-                        </button>
-                    </div>
-                  )) : (
-                    <p className="text-center text-gray-500 py-4">No hay ofrendas registradas.</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end p-4 border-t bg-gray-50 rounded-b-xl">
-                <button onClick={handleCloseModal} className="px-6 py-2 font-semibold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 mr-2 transition-colors">Cancelar</button>
-                <button onClick={handleSaveChanges} className="px-6 py-2 font-semibold text-white bg-success rounded-lg hover:bg-green-600 transition-colors">Guardar Cambios</button>
-            </div>
-          </div>
-        </div>
-      )}
+        )}
     </div>
   );
 };

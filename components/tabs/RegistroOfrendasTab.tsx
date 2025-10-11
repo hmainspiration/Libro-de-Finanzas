@@ -1,7 +1,6 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { Member, WeeklyRecord, Donation, Formulas } from '../../types';
-import { PlusIcon, UserPlusIcon } from '@heroicons/react/24/outline';
+import { Member, WeeklyRecord, Donation, Formulas, ChurchInfo } from '../../types';
+import { PlusIcon, UserPlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { MONTH_NAMES } from '../../constants';
 
 interface AutocompleteInputProps {
@@ -43,7 +42,7 @@ const AutocompleteInput: React.FC<AutocompleteInputProps> = ({ members, onSelect
         value={inputValue}
         onChange={handleChange}
         placeholder="Escriba el nombre del miembro..."
-        className="w-full p-3 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-secondary focus:border-transparent"
+        className="w-full p-3 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-600 focus:border-transparent"
       />
       {suggestions.length > 0 && (
         <ul className="absolute z-10 w-full mt-1 overflow-y-auto bg-white border border-gray-300 rounded-lg shadow-lg max-h-60">
@@ -74,16 +73,17 @@ interface RegistroOfrendasTabProps {
   onStartNew: () => void;
   defaultFormulas: Formulas;
   weeklyRecords: WeeklyRecord[];
+  churchInfo: ChurchInfo;
 }
 
 const RegistroOfrendasTab: React.FC<RegistroOfrendasTabProps> = ({
-  currentRecord, setCurrentRecord, members, setMembers, categories, setCategories, onSaveRecord, onStartNew, defaultFormulas, weeklyRecords
+  currentRecord, setCurrentRecord, members, setMembers, categories, setCategories, onSaveRecord, onStartNew, defaultFormulas, weeklyRecords, churchInfo
 }) => {
   const [dateInfo, setDateInfo] = useState({
     day: new Date().getDate().toString(),
     month: (new Date().getMonth() + 1).toString(),
     year: new Date().getFullYear().toString(),
-    minister: ''
+    minister: churchInfo.defaultMinister || ''
   });
   
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
@@ -103,8 +103,11 @@ const RegistroOfrendasTab: React.FC<RegistroOfrendasTabProps> = ({
             year: currentRecord.year.toString(),
             minister: currentRecord.minister
         });
+    } else {
+        // Pre-fill minister name from defaults when starting a new record
+        setDateInfo(prev => ({ ...prev, minister: churchInfo.defaultMinister || '' }));
     }
-  }, [currentRecord]);
+  }, [currentRecord, churchInfo.defaultMinister]);
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setDateInfo({ ...dateInfo, [e.target.name]: e.target.value });
@@ -144,20 +147,21 @@ const RegistroOfrendasTab: React.FC<RegistroOfrendasTabProps> = ({
       alert('Por favor, guarde la fecha primero.');
       return;
     }
-    if (!selectedMember) {
-      alert('Por favor, seleccione un miembro.');
-      return;
+    
+    const parsedAmount = parseFloat(amount);
+    
+    // Robust validation for member and amount
+    if (!selectedMember || !amount.trim() || isNaN(parsedAmount) || parsedAmount <= 0) {
+        alert('Para agregar una ofrenda, por favor asegúrese de haber seleccionado un miembro válido y de haber ingresado una cantidad numérica positiva.');
+        return;
     }
-    if (!amount || parseFloat(amount) <= 0) {
-      alert('Por favor, ingrese una cantidad válida.');
-      return;
-    }
+
     const newDonation: Donation = {
         id: `d-${Date.now()}`,
         memberId: selectedMember.id,
         memberName: selectedMember.name,
         category: category,
-        amount: parseFloat(amount),
+        amount: parsedAmount,
     };
 
     setCurrentRecord(prev => prev ? { ...prev, donations: [...prev.donations, newDonation] } : null);
@@ -191,7 +195,7 @@ const RegistroOfrendasTab: React.FC<RegistroOfrendasTabProps> = ({
     <div className="space-y-6">
         {!currentRecord ? (
             <div className="p-6 bg-white rounded-xl shadow-lg">
-                <h2 className="text-2xl font-bold text-primary mb-4">Información de la Semana</h2>
+                <h2 className="text-2xl font-bold text-indigo-900 mb-4">Información de la Semana</h2>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div>
                         <label htmlFor="day" className="block text-sm font-medium text-gray-700">Día</label>
@@ -216,90 +220,99 @@ const RegistroOfrendasTab: React.FC<RegistroOfrendasTabProps> = ({
                         <input type="text" value="NIMT02" readOnly className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm bg-gray-100"/>
                     </div>
                 </div>
-                <button onClick={handleCreateRecord} className="w-full mt-6 py-3 font-semibold text-white transition duration-300 rounded-lg bg-secondary hover:bg-blue-600">
+                <button onClick={handleCreateRecord} className="w-full mt-6 py-3 font-semibold text-white transition duration-300 rounded-lg bg-blue-600 hover:bg-blue-700">
                     Guardar Fecha
                 </button>
             </div>
         ) : (
              <div className="p-6 bg-white rounded-xl shadow-lg">
                 <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold text-primary">Semana Actual</h2>
-                    <button onClick={onStartNew} className="px-4 py-2 text-sm font-semibold text-white transition duration-300 bg-green-500 rounded-lg hover:bg-green-600">
-                        Nueva Fecha
+                    <div>
+                        <h2 className="text-2xl font-bold text-indigo-900">Registrando Ofrendas</h2>
+                        <p className="text-gray-500">{`Semana del ${currentRecord.day} de ${MONTH_NAMES[currentRecord.month - 1]} de ${currentRecord.year}`}</p>
+                    </div>
+                    <button onClick={onStartNew} className="px-4 py-2 text-sm bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
+                        Empezar Nueva Semana
                     </button>
                 </div>
-                <p className="text-gray-600">Fecha: {currentRecord.day}/{currentRecord.month}/{currentRecord.year}</p>
-                <p className="text-gray-600">Ministro: {currentRecord.minister}</p>
-            </div>
-        )}
-
-        {currentRecord && (
-            <>
-            <div className="p-6 bg-white rounded-xl shadow-lg space-y-4">
-                <h3 className="text-xl font-bold text-primary">Registrar Ofrenda</h3>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Seleccionar Miembro</label>
-                    <div className="flex items-center space-x-2">
-                        <div className="flex-grow">
+                
+                <div className="p-4 my-4 space-y-4 border rounded-lg bg-gray-50">
+                    <h3 className="text-lg font-semibold text-indigo-900">Agregar Donación</h3>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Miembro</label>
                             <AutocompleteInput members={members} onSelect={setSelectedMember} selectedMemberName={selectedMemberName} />
                         </div>
-                        <button onClick={() => setIsAddingMember(true)} className="p-3.5 bg-secondary text-white rounded-lg hover:bg-blue-600 transition-all duration-300" aria-label="Añadir nuevo miembro">
-                            <UserPlusIcon className="w-5 h-5"/>
-                        </button>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">&nbsp;</label>
+                            <button onClick={() => setIsAddingMember(true)} className="flex items-center justify-center w-full gap-2 px-4 py-3 text-sm font-medium text-blue-700 bg-blue-100 rounded-lg hover:bg-blue-200">
+                                <UserPlusIcon className="w-5 h-5" />
+                                <span>Agregar Nuevo Miembro</span>
+                            </button>
+                        </div>
                     </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label htmlFor="amount" className="block text-sm font-medium text-gray-700">Cantidad (C$)</label>
-                        <input type="number" id="amount" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="mt-1 w-full p-3 bg-white border border-gray-300 rounded-lg shadow-sm" />
+                    {isAddingMember && (
+                        <div className="flex gap-2 p-2 border rounded-md">
+                            <input type="text" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="Nombre completo" className="flex-grow p-2 border border-gray-300 rounded-md shadow-sm"/>
+                            <button onClick={handleAddNewMember} className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700">Guardar</button>
+                            <button onClick={() => setIsAddingMember(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300">Cancelar</button>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Categoría</label>
+                            <select value={category} onChange={e => setCategory(e.target.value)} className="w-full p-3 mt-1 bg-white border border-gray-300 rounded-lg">
+                                {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Cantidad (C$)</label>
+                            <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="w-full p-3 mt-1 bg-white border border-gray-300 rounded-lg" />
+                        </div>
+                        <div className="self-end">
+                            <button onClick={handleAddOfrenda} className="flex items-center justify-center w-full gap-2 px-4 py-3 font-semibold text-white transition duration-300 bg-blue-600 rounded-lg hover:bg-blue-700">
+                                <PlusIcon className="w-5 h-5" />
+                                <span>Agregar</span>
+                            </button>
+                        </div>
                     </div>
-                    <div>
-                        <label htmlFor="category" className="block text-sm font-medium text-gray-700">Categoría</label>
-                         <select id="category" value={category} onChange={e => setCategory(e.target.value)} className="mt-1 w-full p-3 bg-white border border-gray-300 rounded-lg shadow-sm">
-                            {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                        </select>
-                    </div>
+
+                    <button onClick={() => setIsAddingCategory(true)} className="text-sm text-blue-600 hover:underline">
+                        + Agregar nueva categoría
+                    </button>
+                    {isAddingCategory && (
+                         <div className="flex gap-2 p-2 border rounded-md">
+                            <input type="text" value={newCategory} onChange={e => setNewCategory(e.target.value)} placeholder="Nombre de categoría" className="flex-grow p-2 border border-gray-300 rounded-md shadow-sm"/>
+                            <button onClick={handleAddNewCategory} className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700">Guardar</button>
+                            <button onClick={() => setIsAddingCategory(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300">Cancelar</button>
+                        </div>
+                    )}
                 </div>
 
-                <div className="flex items-center space-x-4">
-                     <button onClick={handleAddOfrenda} className="flex-grow py-3 font-semibold text-white transition duration-300 rounded-lg bg-primary hover:bg-gray-700 flex items-center justify-center">
-                        <PlusIcon className="w-5 h-5 mr-2" />
-                        Agregar Ofrenda
-                    </button>
-                     <button onClick={() => setIsAddingCategory(prev => !prev)} className="py-3 px-4 font-semibold text-white transition duration-300 bg-yellow-500 rounded-lg hover:bg-yellow-600">
-                        <UserPlusIcon className="w-5 h-5" />
-                    </button>
+                <div className="space-y-2">
+                    {currentRecord.donations.length > 0 ? (
+                        currentRecord.donations.map(donation => (
+                            <div key={donation.id} className="flex items-center justify-between p-2 bg-gray-100 rounded-md">
+                                <div>
+                                    <p className="font-medium">{donation.memberName}</p>
+                                    <p className="text-sm text-gray-500">{donation.category} - C$ {donation.amount.toFixed(2)}</p>
+                                </div>
+                                <button
+                                    onClick={() => setCurrentRecord(prev => prev ? {...prev, donations: prev.donations.filter(d => d.id !== donation.id)} : null)}
+                                    className="text-red-500 hover:text-red-700"
+                                >
+                                    <TrashIcon className="w-5 h-5" />
+                                </button>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-center text-gray-500">Aún no hay ofrendas registradas para esta semana.</p>
+                    )}
                 </div>
-                {isAddingCategory && (
-                    <div className="flex items-center space-x-2 pt-2">
-                        <input type="text" value={newCategory} onChange={e => setNewCategory(e.target.value)} placeholder="Nueva categoría" className="flex-grow p-2 border border-gray-300 rounded-lg"/>
-                        <button onClick={handleAddNewCategory} className="px-4 py-2 bg-success text-white rounded-lg">Guardar</button>
-                    </div>
-                )}
-            </div>
-
-            <button onClick={onSaveRecord} className="w-full mt-6 py-3 font-semibold text-white transition duration-300 rounded-lg bg-success hover:bg-green-600">
-                Guardar Semana y Ver Resumen
-            </button>
-            </>
-        )}
-        {isAddingMember && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50" role="dialog" aria-modal="true">
-                <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm">
-                    <h3 className="text-lg font-bold mb-4 text-primary">Añadir Nuevo Miembro</h3>
-                    <input
-                        type="text"
-                        value={newMemberName}
-                        onChange={(e) => setNewMemberName(e.target.value)}
-                        placeholder="Nombre completo del miembro"
-                        className="w-full p-2 border border-gray-300 rounded-md mb-4"
-                        autoFocus
-                    />
-                    <div className="flex justify-end space-x-2">
-                        <button onClick={() => setIsAddingMember(false)} className="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition-colors">Cancelar</button>
-                        <button onClick={handleAddNewMember} className="px-4 py-2 bg-success text-white rounded-md hover:bg-green-600 transition-colors">Guardar</button>
-                    </div>
-                </div>
+                <button onClick={onSaveRecord} className="w-full mt-6 py-3 font-semibold text-white transition duration-300 bg-green-600 rounded-lg hover:bg-green-700">
+                    Guardar Semana y Ver Resumen
+                </button>
             </div>
         )}
     </div>

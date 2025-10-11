@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import { WeeklyRecord, Donation } from '../../types';
 
@@ -59,13 +58,13 @@ const ResumenFinancieroTab: React.FC<ResumenFinancieroTabProps> = ({ currentReco
   return (
     <div className="space-y-6">
       <div className="p-4 sm:p-6 bg-white rounded-xl shadow-lg">
-        <h2 className="text-2xl font-bold text-primary mb-4">Resumen Financiero Semanal</h2>
+        <h2 className="text-2xl font-bold text-indigo-900 mb-4">Resumen Financiero Semanal</h2>
         <p className="text-gray-600">Fecha: {currentRecord.day}/{currentRecord.month}/{currentRecord.year}</p>
         <p className="text-gray-600">Ministro: {currentRecord.minister}</p>
         
         <div className="overflow-x-auto mt-6">
           <table className="w-full text-sm text-left text-gray-500">
-            <thead className="text-xs text-white uppercase bg-primary">
+            <thead className="text-xs text-white uppercase bg-indigo-900">
               <tr>
                 <th scope="col" className="px-6 py-3">Nombre</th>
                 {categories.map(cat => <th key={cat} scope="col" className="px-6 py-3 text-right">{cat}</th>)}
@@ -89,7 +88,7 @@ const ResumenFinancieroTab: React.FC<ResumenFinancieroTabProps> = ({ currentReco
       
       {totals && (
         <div className="p-4 sm:p-6 bg-white rounded-xl shadow-lg">
-          <h3 className="text-xl font-bold text-primary mb-4">Totales y Cálculos</h3>
+          <h3 className="text-xl font-bold text-indigo-900 mb-4">Totales y Cálculos</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-4 space-y-2 bg-blue-50 rounded-lg">
               <h4 className="font-bold text-blue-800">Sub-totales por Categoría</h4>
