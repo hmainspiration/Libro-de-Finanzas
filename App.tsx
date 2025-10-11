@@ -29,3 +29,7 @@ const App: React.FC = () => {
 };
 
 export default App;
+el resto de codigo
+git add .
+git commit -m "Forzar re-despliegue en Vercel"
+git push origin main
